@@ -301,17 +301,30 @@ var init_auth = __esm({
         const existingUser = await db_default.user.findUnique({
           where: { email }
         });
+        let user;
         if (existingUser) {
-          return res.status(400).json({ error: "Email already registered" });
-        }
-        const passwordHash = await bcrypt.hash(password, 10);
-        const user = await db_default.user.create({
-          data: {
-            email,
-            passwordHash,
-            name: name || null
+          if (existingUser.passwordHash !== "") {
+            return res.status(400).json({ error: "Email already registered" });
           }
-        });
+          const passwordHash = await bcrypt.hash(password, 10);
+          user = await db_default.user.update({
+            where: { id: existingUser.id },
+            data: {
+              passwordHash,
+              name: name || null
+            }
+          });
+          console.log(`[Auth Signup] Placeholder user ${email} upgraded to fully registered account.`);
+        } else {
+          const passwordHash = await bcrypt.hash(password, 10);
+          user = await db_default.user.create({
+            data: {
+              email,
+              passwordHash,
+              name: name || null
+            }
+          });
+        }
         const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
           expiresIn: "30d"
         });
@@ -1158,6 +1171,17 @@ var init_entitlements = __esm({
         hasExamMode: false,
         hasExport: false
       },
+      PLUS: {
+        maxRecordingsLifetime: -1,
+        maxTranscriptionMinutesPerMonth: 120,
+        hasFlashcards: true,
+        hasNotes: true,
+        hasMindMap: true,
+        hasQuizzes: true,
+        hasAdaptiveReview: false,
+        hasExamMode: false,
+        hasExport: false
+      },
       PRO: {
         maxRecordingsLifetime: -1,
         maxTranscriptionMinutesPerMonth: 300,
@@ -1358,7 +1382,7 @@ function sanitizeError(error) {
   const msg = error?.message || String(error);
   return msg.replace(/postgres:\/\/[^\s]+/gi, "postgres://***").replace(/Bearer\s+\S+/gi, "Bearer ***").replace(/token[=:]\s*\S+/gi, "token=***");
 }
-var router3, billing_default;
+var router3, INTERNAL_API_SECRET, billing_default;
 var init_billing = __esm({
   "server/billing.ts"() {
     "use strict";
@@ -1646,6 +1670,95 @@ var init_billing = __esm({
         }
       }
     );
+    INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "studymind-stripe-webhook-secret-2026-default";
+    router3.post("/stripe-webhook", async (req, res) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        res.status(401).json({ error: "Missing or invalid authorization header" });
+        return;
+      }
+      const token = authHeader.substring(7);
+      if (token !== INTERNAL_API_SECRET) {
+        res.status(403).json({ error: "Forbidden: Invalid API secret" });
+        return;
+      }
+      try {
+        const { email, plan, expiresAt, subscriptionId, priceId, status } = req.body;
+        if (!email || !plan || !subscriptionId) {
+          res.status(400).json({ error: "Missing required fields: email, plan, subscriptionId" });
+          return;
+        }
+        const lowerEmail = email.toLowerCase();
+        let user = await db_default.user.findUnique({
+          where: { email: lowerEmail }
+        });
+        if (!user) {
+          console.log(`[Stripe Sync] Creating placeholder account for new user: ${lowerEmail}`);
+          user = await db_default.user.create({
+            data: {
+              email: lowerEmail,
+              passwordHash: ""
+              // Placeholder - will complete registration via signup endpoint
+            }
+          });
+        }
+        const parsedExpiresAt = expiresAt ? new Date(expiresAt) : null;
+        await db_default.entitlement.upsert({
+          where: { userId: user.id },
+          create: {
+            userId: user.id,
+            plan,
+            expiresAt: parsedExpiresAt,
+            source: "stripe"
+          },
+          update: {
+            plan,
+            expiresAt: parsedExpiresAt,
+            source: "stripe"
+          }
+        });
+        await db_default.subscriptionStatus.upsert({
+          where: { userId: user.id },
+          create: {
+            userId: user.id,
+            platform: "stripe",
+            status,
+            productId: priceId,
+            currentPeriodEnd: parsedExpiresAt
+          },
+          update: {
+            platform: "stripe",
+            status,
+            productId: priceId,
+            currentPeriodEnd: parsedExpiresAt
+          }
+        });
+        await db_default.purchase.upsert({
+          where: { purchaseTokenOrTransactionId: subscriptionId },
+          create: {
+            userId: user.id,
+            platform: "stripe",
+            productId: priceId,
+            purchaseTokenOrTransactionId: subscriptionId,
+            rawReceiptJson: JSON.stringify({ email, plan, status, priceId }),
+            verifiedAt: /* @__PURE__ */ new Date()
+          },
+          update: {
+            verifiedAt: /* @__PURE__ */ new Date()
+          }
+        });
+        console.log(`[Stripe Sync] Successfully updated plan to ${plan} for ${lowerEmail} (Status: ${status})`);
+        res.json({
+          success: true,
+          userId: user.id,
+          plan,
+          status
+        });
+      } catch (error) {
+        console.error("[Stripe Sync] Error updating subscription:", error);
+        res.status(500).json({ error: "Failed to update subscription in backend database" });
+      }
+    });
     billing_default = router3;
   }
 });
