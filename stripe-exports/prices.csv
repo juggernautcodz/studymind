@@ -1,0 +1,5 @@
+Price ID,Product ID,Product Name,Product Statement Descriptor,Product Tax Code,Description,Created (UTC),Amount,Currency,Interval,Interval Count,Usage Type,Aggregate Usage,Billing Scheme,Trial Period Days,Tax Behavior
+price_1TSJJeCobmwUFtiDtktPh3kv,prod_URBhmGODOzHVcX,StudyMind Pro,,,,2026-05-01 15:49,59.99,cad,year,1,licensed,,per_unit,,unspecified
+price_1TSJJ0CobmwUFtiD3nrOvpfR,prod_URBgnSQiFXa1uf,StudyMind Pro,,,,2026-05-01 15:48,7.99,cad,month,1,licensed,,per_unit,,unspecified
+price_1TSJI7CobmwUFtiD6sKKmyMy,prod_URBfh2cGG41Gma,StudyMind Plus,,,,2026-05-01 15:47,29.99,cad,year,1,licensed,,per_unit,,unspecified
+price_1TSJ0MCobmwUFtiDIdvwchCc,prod_URBN6IbwDdKyJb,StudyMind Plus,,,,2026-05-01 15:29,3.99,cad,month,1,licensed,,per_unit,,unspecified

@@ -1,0 +1,237 @@
+#!/usr/bin/env node
+/**
+ * Production Audit Gate
+ * - Runs build
+ * - Verifies build artifacts
+ * - Boots production server
+ * - Probes health + web
+ * - Shuts down server
+ *
+ * Usage:
+ *   node scripts/audit.cjs
+ *
+ * Optional env:
+ *   AUDIT_PORT=3002
+ *   AUDIT_TIMEOUT_MS=45000
+ *   AUDIT_SKIP_BUILD=1
+ */
+
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const http = require("node:http");
+
+const ROOT = process.cwd();
+
+const PORT = Number(process.env.AUDIT_PORT || process.env.PORT || 3002);
+const TIMEOUT_MS = Number(process.env.AUDIT_TIMEOUT_MS || 45_000);
+const SKIP_BUILD = process.env.AUDIT_SKIP_BUILD === "1";
+
+const ARTIFACTS = [
+  { file: "dist/index.html", why: "Expo web export output" },
+  { file: "server_dist/index.mjs", why: "Bundled production server" },
+];
+
+// Paths we expect to be served successfully.
+// "/" should return HTML for the SPA.
+// "/api/health" should return JSON with status.
+const PROBES = [
+  { path: "/api/health", expectStatus: 200, expectContains: `"status"` },
+  { path: "/", expectStatus: 200, expectContains: "<" }, // HTML
+  // SPA fallback checks (should return index.html, hence HTML content)
+  { path: "/dashboard", expectStatus: 200, expectContains: "<" },
+  { path: "/privacy", expectStatus: 200, expectContains: "<" },
+];
+
+function log(msg) {
+  process.stdout.write(`${msg}\n`);
+}
+function warn(msg) {
+  process.stderr.write(`WARN: ${msg}\n`);
+}
+function fail(msg) {
+  process.stderr.write(`FAIL: ${msg}\n`);
+  process.exitCode = 1;
+}
+
+function exists(rel) {
+  return fs.existsSync(path.join(ROOT, rel));
+}
+
+function run(cmd, args, opts = {}) {
+  return new Promise((resolve, reject) => {
+    log(`\n$ ${cmd} ${args.join(" ")}`);
+    const child = spawn(cmd, args, {
+      stdio: "inherit",
+      shell: process.platform === "win32",
+      ...opts,
+    });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Command failed (${code}): ${cmd} ${args.join(" ")}`));
+    });
+  });
+}
+
+function httpGet({ path: reqPath }) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: "127.0.0.1",
+        port: PORT,
+        path: reqPath,
+        method: "GET",
+        timeout: TIMEOUT_MS,
+        headers: {
+          // Helps servers that check host/platform headers; harmless otherwise.
+          "User-Agent": "prod-audit/1.0",
+          Accept: "*/*",
+        },
+      },
+      (res) => {
+        let data = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => resolve({ status: res.statusCode || 0, body: data }));
+      }
+    );
+    req.on("timeout", () => {
+      req.destroy(new Error(`Request timed out after ${TIMEOUT_MS}ms: ${reqPath}`));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+async function waitForServer() {
+  const start = Date.now();
+  let lastErr = null;
+
+  while (Date.now() - start < TIMEOUT_MS) {
+    try {
+      const res = await httpGet({ path: "/api/health" });
+      if (res.status === 200) return;
+      lastErr = new Error(`Health returned status ${res.status}`);
+    } catch (e) {
+      lastErr = e;
+    }
+    await new Promise((r) => setTimeout(r, 350));
+  }
+
+  throw lastErr || new Error("Server did not become ready in time");
+}
+
+async function main() {
+  log("=== Production Audit Gate ===");
+  log(`PORT=${PORT} TIMEOUT_MS=${TIMEOUT_MS} SKIP_BUILD=${SKIP_BUILD ? "1" : "0"}`);
+
+  // 1) Build
+  if (!SKIP_BUILD) {
+    try {
+      await run("node", ["scripts/build.cjs"], {
+        env: {
+          ...process.env,
+          NODE_ENV: "production",
+        },
+      });
+    } catch (e) {
+      fail(`Build step failed: ${e.message}`);
+      return;
+    }
+  } else {
+    warn("Skipping build (AUDIT_SKIP_BUILD=1). Hope you know what you’re doing.");
+  }
+
+  // 2) Artifact checks
+  log("\nChecking build artifacts...");
+  for (const a of ARTIFACTS) {
+    if (!exists(a.file)) {
+      fail(`Missing artifact: ${a.file} (${a.why})`);
+    } else {
+      log(`OK: ${a.file}`);
+    }
+  }
+  if (process.exitCode) return;
+
+  // 3) Start production server
+  log("\nStarting production server...");
+  const serverCmd = "node";
+  const serverArgs = ["server_dist/index.mjs"];
+
+  const child = spawn(serverCmd, serverArgs, {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      PORT: String(PORT),
+    },
+  });
+
+  let exited = false;
+  child.on("exit", (code) => {
+    exited = true;
+    if (code !== 0) {
+      fail(`Server exited early with code ${code}`);
+    } else {
+      warn("Server exited with code 0 (unexpected during audit unless we stopped it).");
+    }
+  });
+
+  // 4) Wait for readiness
+  try {
+    await waitForServer();
+    log("Server is ready.");
+  } catch (e) {
+    fail(`Server did not become ready: ${e.message}`);
+    try {
+      child.kill("SIGTERM");
+    } catch {}
+    return;
+  }
+
+  // 5) Probe endpoints
+  log("\nProbing endpoints...");
+  for (const p of PROBES) {
+    try {
+      const res = await httpGet({ path: p.path });
+      if (res.status !== p.expectStatus) {
+        fail(`${p.path}: expected ${p.expectStatus}, got ${res.status}`);
+        continue;
+      }
+      if (p.expectContains && !res.body.includes(p.expectContains)) {
+        fail(`${p.path}: response missing expected content`);
+        continue;
+      }
+      log(`OK: ${p.path}`);
+    } catch (e) {
+      fail(`${p.path}: request failed: ${e.message}`);
+    }
+  }
+
+  // 6) Shutdown
+  log("\nShutting down server...");
+  if (!exited) {
+    try {
+      // SIGTERM for Cloud Run friendliness; SIGINT fallback if needed
+      child.kill("SIGTERM");
+      await new Promise((r) => setTimeout(r, 750));
+      if (!exited) child.kill("SIGINT");
+      await new Promise((r) => setTimeout(r, 750));
+      if (!exited) child.kill("SIGKILL");
+    } catch {
+      // ignore
+    }
+  }
+
+  if (process.exitCode) {
+    fail("Audit FAILED. Fix issues above before deploying.");
+  } else {
+    log("Audit PASSED. Ship it responsibly.");
+  }
+}
+
+main().catch((e) => {
+  fail(`Unexpected audit error: ${e.stack || e.message}`);
+});

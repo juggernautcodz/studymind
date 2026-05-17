@@ -1,0 +1,83 @@
+DO NOT refactor the app. DO NOT change auth. DO NOT change navigation structure globally.
+Only add a Writing Lab screen and a single button on the Home screen to open it.
+
+GOAL:
+Add a “Writing Lab” feature accessible from a Home screen button labeled “Writing Lab”.
+
+BACKEND IS ALREADY DONE:
+Endpoints exist at:
+POST /api/writing/outline
+POST /api/writing/draft
+POST /api/writing/revise
+POST /api/writing/style-edit
+POST /api/writing/clean
+
+POLICY:
+Do NOT implement any AI detector bypass, “humanizer to evade detection”, or watermark removal.
+Only ethical rewriting + cleaning.
+
+FILES YOU MAY EDIT/CREATE:
+- CREATE: client/screens/WritingLab.tsx (or wherever screens live in this repo)
+- EDIT: the existing Home screen file (only to add ONE button)
+- EDIT: the smallest navigation/router file needed to register the WritingLab route
+
+DO NOT edit server/* files in this prompt.
+
+REQUIREMENTS:
+
+1) Add WritingLab screen with 3 tabs/sections inside the screen:
+   - Essay
+   - Rewrite
+   - Clean
+
+2) Login required:
+   - Use the app’s existing “is logged in” check (copy pattern from another screen).
+   - If not logged in: show text “Log in to use Writing Lab” + a button that navigates to the existing Login screen.
+
+3) Use API base URL:
+   - Use EXPO_PUBLIC_API_URL for requests.
+   - Use the same auth header/token method used by existing API calls in this app.
+   - Do NOT invent a new auth method.
+
+4) Essay tab UI:
+   Inputs:
+   - Topic (text)
+   - Grade level dropdown: Middle school / High school / College
+   - Word count (number)
+   - Tone dropdown: Neutral / Formal / Casual
+   - Citation style dropdown: APA / MLA / Chicago / None
+   - Notes (multiline)
+   Buttons:
+   - Generate Outline -> POST /api/writing/outline
+   - Write Draft -> POST /api/writing/draft
+   - Improve Draft -> POST /api/writing/revise
+   Show outputs in a scrollable text area. Include Copy button.
+
+   Behavior:
+   - Draft/Revise may return 403 { type:"PAYWALL_REQUIRED" } -> show a clean upgrade message (do not crash).
+   - 429 -> show “Daily limit reached”
+   - 503 -> show “AI temporarily unavailable”
+
+5) Rewrite tab UI:
+   - Text input textarea
+   - Mode picker: clearer / more formal / more casual / shorten / improve flow / fix grammar
+   - Button Rewrite -> POST /api/writing/style-edit
+   - Output + Copy button
+   - Same error handling as above.
+
+6) Clean tab UI:
+   - Text input textarea
+   - Button Clean -> POST /api/writing/clean (only needs { text })
+   - Show cleanedText + stats line + Copy button
+
+7) Home button:
+   - On the Home screen, add a visible button labeled “Writing Lab”.
+   - It navigates to the WritingLab screen.
+
+8) Deliverables:
+   After implementing, show me:
+   - The exact file path of the Home screen file you edited
+   - The exact navigation file you edited
+   - The full content of WritingLab.tsx
+   - A minimal diff or snippet showing the Home button addition
+Then stop.

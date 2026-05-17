@@ -1,0 +1,83 @@
+When finished, do NOT send explanations, commentary, or prose.
+
+Return 3 JSON blocks only, in this order:
+
+1) thresholds_config.json
+Define learning-quality thresholds and access rules.
+
+Must include:
+- dataConfidence rules:
+  - DATA_OK, DATA_PARTIAL, DATA_MISSING
+  - rules for how each study mode behaves when data is partial or missing
+- requiredFields per mode
+- Numeric thresholds for each mode
+
+Modes:
+- ALL (baseline)
+- SAFER (structured, low-risk learning)
+- DEGEN (fast, high-intensity cram mode)
+- EXAM (exam-focused optimization)
+
+Threshold examples (adjust appropriately):
+- minLectureDurationMinutes
+- minTranscriptConfidenceScore
+- minNotesCompletenessScore
+- minFlashcardsCount
+- minQuizQuestions
+- maxDaysSinceLastStudy
+- minStudySessionsCompleted
+- aiProcessingRequired (true/false)
+
+2) scoring_config.json
+Define how study quality and readiness are scored.
+
+Must include:
+- scoring weights (must sum to 1.0)
+- subscores with rule-based scoring (0–100)
+  Examples:
+  - contentQuality
+  - coverageCompleteness
+  - retentionStrength
+  - consistency
+  - examReadiness
+- risk flag logic (array of conditional rules)
+
+Risk flag examples:
+- NO_TRANSCRIPT
+- LOW_NOTE_QUALITY
+- INSUFFICIENT_FLASHCARDS
+- QUIZ_FAILURE_RATE_HIGH
+- LAST_MINUTE_CRAM
+- STUDY_GAPS_DETECTED
+
+3) examples.json
+Provide TWO example evaluations:
+
+A) One SAFER mode evaluation
+B) One DEGEN mode evaluation
+
+Each example MUST include:
+- dataConfidence
+- mode
+- pass (true/false)
+- reasons[] (human-readable strings)
+- scoreBreakdown {} (each subscore)
+- totalScore (0–100)
+- riskFlags[] (array, may be empty)
+
+Examples must look like real outputs the app would generate after analyzing:
+- lecture recordings
+- transcripts
+- notes
+- flashcards
+- quizzes
+- study history
+
+Formatting rules:
+- Valid JSON only
+- No comments
+- No trailing commas
+- Keys in camelCase
+- Deterministic numeric values (no placeholders)
+
+Do not include anything outside the 3 JSON blocks.

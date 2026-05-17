@@ -1,0 +1,92 @@
+You are a senior production engineer.
+
+You are given the following production audit report.
+
+<REPORT>
+# Production Audit Report
+
+**Timestamp:** 2026-02-26T03:41:26.660Z
+**Node Version:** v22.22.0
+**Verdict:** PASS
+
+## Build Artifacts
+
+| File | Size | Status |
+|------|------|--------|
+| `dist/index.html` | 1.2 KB | OK |
+| `server_dist/index.mjs` | 157.6 KB | OK |
+
+## Probe Results
+
+| Endpoint | Expected | Got | Status |
+|----------|----------|-----|--------|
+| `/api/health` | 200 | 200 | PASS |
+| `/` | 200 | 200 | PASS |
+| `/dashboard` | 200 | 200 | PASS |
+| `/privacy` | 200 | 200 | PASS |
+| `/robots.txt` | 200 | 200 | PASS |
+
+## Mounted Routes
+
+- study -> /api
+- auth -> /api/auth
+- billing -> /api/billing
+- adaptive -> /api/adaptive
+- exams -> /api/exams
+- ai -> /api/ai
+- writing -> /api/writing
+- search -> /api
+
+## Environment Variables Referenced in Code
+
+Names only (no values):
+
+- `PORT`
+- `NODE_ENV`
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `REPLIT_DEV_DOMAIN`
+- `REPLIT_DOMAINS`
+- `REPLIT_DEPLOYMENT_URL`
+- `REPL_SLUG`
+- `REPL_OWNER`
+- `EXPO_PUBLIC_DOMAIN`
+- `AI_INTEGRATIONS_OPENAI_API_KEY`
+- `AI_INTEGRATIONS_OPENAI_BASE_URL`
+- `GOOGLE_PLAY_PACKAGE_NAME`
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
+
+</REPORT>
+
+Your job:
+
+1) Read the report completely.
+2) Identify any:
+   - FAILED probes
+   - Missing artifacts
+   - Unexpected route behavior
+   - Risky environment variable usage
+   - Deployment risks
+3) Propose precise file changes to fix issues.
+4) Do NOT redesign architecture unless absolutely necessary.
+5) Maintain:
+   - Expo web export -> dist/
+   - server_dist/index.mjs production server
+   - No Metro in production
+   - PORT binding via process.env.PORT
+6) If audit passed, suggest:
+   - reliability improvements
+   - performance optimizations
+   - security hardening
+   - SEO improvements (robots.txt, sitemap.xml, meta tags)
+7) Output:
+   - Exact files to modify
+   - Precise diffs or complete replacements
+   - Any new scripts required
+   - Any new environment variable names (names only, no values)
+
+Rules:
+- Do not guess.
+- Do not remove working behavior.
+- Prefer minimal, deterministic changes.
+- Keep deployment compatible with Cloud Run / Replit.

@@ -1,0 +1,54 @@
+name: Diagnostic Stabilizer
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Run audit
+        run: npm run audit
+
+      - name: Attempt server boot (non-blocking)
+        run: |
+          timeout 20 npm start || true
+
+      - name: Upload diagnostics (logs/artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-logs
+          path: .
+          if-no-files-found: warn
+
+      - name: Open issue if failed
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "CI Diagnostic Failure",
+              body: "Diagnostic workflow failed. Check logs and artifacts in the Actions tab for details."
+            })

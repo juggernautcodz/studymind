@@ -1,0 +1,51 @@
+Fix Study-Mind so adding new study material does not overwrite previous notes/cards/quiz for the same topic.
+
+Current bug:
+If I use Clipboard and then use Upload, the later operation makes the previous study info disappear.
+The app should keep things organized and cumulative, not overwrite prior material.
+
+Goal:
+New content sources (Clipboard, Upload, Camera, Gallery, Record) should not erase previously generated study material for the same topic unless explicitly intended.
+
+Audit and fix these areas:
+1. client/lib/storage.ts
+2. client/screens/CourseScreen.tsx
+3. client/screens/RecordScreen.tsx
+4. any save/generate helpers used for notes, flashcards, quiz, whiteboard/scanned/uploaded text
+
+Find the root cause:
+- Are notes being saved with replace semantics instead of append/merge?
+- Are flashcards/quizzes being replaced wholesale for the topic?
+- Is the UI only showing the latest generated note object instead of all note entries?
+- Is "Study Notes" being reused as one record and overwritten every time?
+
+Required behavior:
+1. Each new source input should create a distinct saved content entry or append safely.
+2. Existing notes must remain visible after adding new content.
+3. Existing flashcards must remain unless explicit replace is intended.
+4. Existing quiz data must remain unless explicit replace is intended.
+5. If materials are topic-scoped, merge or accumulate them by topic instead of overwriting.
+6. Prefer the smallest safe fix.
+7. Keep the UI organized:
+   - Notes should show combined/stacked sections or multiple note entries
+   - Cards should include previously generated cards plus new ones
+   - Quiz should not silently delete prior generated quiz unless designed to version it clearly
+
+Implementation guidance:
+- If storage.saveNotes currently overwrites by topicId/title, change it to append a new note entry or merge sections.
+- If storage.saveFlashcards or storage.saveQuiz replaces arrays for a topic, change it so new generated items append with proper orderIndex offset.
+- If the UI only reads the latest item, update it to render all topic-linked notes/materials.
+- Add a small source label if helpful (Clipboard, Upload, Camera, Record), but do not redesign the whole app.
+
+Success criteria:
+- Add content via Clipboard
+- Then add content via Upload
+- Both sets of Notes remain
+- Both sets of Flashcards remain
+- Quiz content is preserved or clearly versioned, not silently overwritten
+
+Output:
+1. files changed
+2. exact overwrite root cause
+3. exact code changes
+4. final phone test flow

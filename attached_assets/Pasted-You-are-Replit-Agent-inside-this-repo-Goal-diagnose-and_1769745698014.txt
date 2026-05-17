@@ -1,0 +1,108 @@
+You are Replit Agent inside this repo. Goal: diagnose and fix the WHITE SCREEN + infinite loading spinner, then produce a concise report for ChatGPT to analyze.
+
+NON-NEGOTIABLE RULES
+- Do NOT do big refactors. Make the smallest safe changes.
+- Do NOT change UI/UX unless required to stop the spinner.
+- Prefer fixes that work both in Replit Webview and local dev.
+- After each change, run the app and verify the spinner resolves.
+- Keep a changelog of every file touched + what changed.
+- If you cannot fully fix, still produce the report with the top 3 likely causes and exact next steps.
+
+TASKS (DO IN THIS ORDER)
+
+1) Reproduce + Capture Evidence
+- Open the app in Webview and reproduce the infinite spinner.
+- Capture:
+  a) The FIRST red error in the browser console (not warnings).
+  b) Network tab: identify the request(s) that are Pending/Failed/401/403/404/CORS.
+  c) The exact Request URL, Status, and Response body/snippet for the stuck request.
+- Paste these into a section called "Evidence".
+
+2) Identify Architecture
+- Determine if this is:
+  - Vite/React SPA only, OR
+  - SPA + Node/Express API, OR
+  - Next.js, OR other.
+- Find entry points:
+  - index.html and main entry (src/main.tsx or similar)
+  - API server file (server/index.ts, src/server, etc.) and its port/host binding
+- Document this in "Project Layout".
+
+3) Find the Spinner Logic
+- Search for:
+  - loading state gating (e.g., isLoading, loading, setLoading)
+  - “spinner” component
+  - auth/session bootstrap call (e.g., /api/me, /auth/me, /session)
+- Identify the exact code path that keeps loading=true forever.
+- Add temporary logging ONLY if needed, and remove it once fixed.
+
+4) Fix the Root Cause (most common causes)
+Try these in priority order based on Evidence:
+
+A) Wrong API base URL (localhost hardcoded)
+- Search for "localhost", "127.0.0.1", hardcoded API_URL.
+- Replace with relative "/api" calls when possible.
+
+B) Vite proxy missing (frontend calling /api but no proxy)
+- If SPA runs on 5173 and API runs on 3000, add/verify vite.config.ts proxy:
+  proxy "/api" -> "http://127.0.0.1:3000"
+- Ensure server.host = "0.0.0.0" and strictPort enabled.
+
+C) Backend not running / wrong port / not binding to 0.0.0.0
+- Ensure backend uses process.env.PORT (or configured port) and listens on 0.0.0.0.
+- Ensure scripts start both client + server (concurrently if needed) OR Replit config starts correct command.
+
+D) CORS/cookies/session blocked
+- If requests are blocked by CORS or credentials, fix server CORS:
+  origin: true, credentials: true
+- If cookie-based auth: ensure cookies set with Secure + SameSite=None when needed.
+- Ensure client fetch includes credentials if using cookies.
+
+E) 404 route mismatch
+- If /api/* doesn’t exist, correct routes or proxy path.
+
+5) Verify
+- After each fix:
+  - Restart the dev server(s)
+  - Hard refresh Webview
+  - Confirm spinner disappears and primary page renders
+  - Confirm key API call returns success (200) or expected auth state
+- Add "Verification" notes with what you tested and results.
+
+6) Produce a Report for ChatGPT (MANDATORY FORMAT)
+Create a file at: /REPORT_FOR_CHATGPT.md with exactly these sections:
+
+# Summary
+(1–3 bullets: what was broken, root cause, final outcome)
+
+# Evidence
+- Console first red error:
+- Network stuck/failed request(s): (URL, status, response)
+- Any server logs errors:
+
+# Root Cause
+(Plain English + the exact file/line or function involved)
+
+# Fixes Applied
+List each change:
+- File:
+- What changed:
+- Why:
+
+# How to Reproduce (Before)
+(steps)
+
+# How to Verify (After)
+(steps + expected result)
+
+# Remaining Risks / TODO
+(only if any)
+
+# Diff Snippets
+Paste short code snippets (max ~30 lines per snippet) showing key changes.
+
+7) Final Output
+- Ensure the app runs without infinite spinner in Webview.
+- Print the path to the report file and a short 5-line summary in the console.
+
+BEGIN NOW.

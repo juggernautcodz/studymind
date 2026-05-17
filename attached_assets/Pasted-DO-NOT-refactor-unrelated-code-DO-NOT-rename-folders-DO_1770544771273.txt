@@ -1,0 +1,84 @@
+DO NOT refactor unrelated code. DO NOT rename folders. DO NOT touch billing validators. 
+Only do the exact steps below and stop.
+
+Project: StudyMind (Express backend in /server). Routes mounted in server/routes.ts using safeMount(app, path, router, label).
+
+GOAL: Add Writing Lab backend endpoints (ethical writing tutor + cleaner). Auth required for all endpoints.
+
+FILES YOU MAY EDIT/CREATE:
+- CREATE: server/writing.ts
+- EDIT: server/routes.ts
+OPTIONAL (only if needed): server/lib/rate-limit.ts (if no limiter exists)
+
+DO NOT edit any other file.
+
+REQUIREMENTS:
+1) Create server/writing.ts exporting an Express Router with endpoints:
+   POST /outline
+   POST /draft
+   POST /revise
+   POST /style-edit
+   POST /clean
+
+2) Mount router in server/routes.ts:
+   safeMount(app, "/api/writing", writingRoutes, "writing")
+
+3) Auth:
+   All endpoints require login. Use existing auth middleware from server/auth.ts. 
+   If your auth middleware exports a router or helper, follow existing patterns in other routes.
+   If you can’t find a direct middleware, inspect how server/study.ts or server/exam.ts does auth and mirror it.
+
+4) Premium gating:
+   - outline + clean: any logged-in user
+   - style-edit: BASE+
+   - draft + revise: PRO
+   - reviewer bypass: if req.user.email === "reviewer@studymindapp.com", allow all premium endpoints regardless of plan
+
+5) Plan lookup:
+   Use Prisma via server/db.ts or existing entitlement logic.
+   Implement getUserPlan(userId) returning "FREE" | "BASE" | "PRO".
+   If entitlement not found, default "FREE".
+   If entitlement has expiresAt in past, treat as FREE.
+
+6) Rate limiting (in-memory Map is fine):
+   - per-minute: 2 requests/min per user for AI endpoints (outline/draft/revise/style-edit)
+   - per-day: FREE 5/day, BASE/PRO 50/day (reviewer treated as 50/day)
+   Return 429 with { code: "RATE_LIMIT_DAY" } or { code: "RATE_LIMIT_MINUTE" }.
+
+7) AI calling:
+   Use env vars (same pattern as server/ai-providers.ts):
+   - AI_INTEGRATIONS_OPENAI_API_KEY
+   - AI_INTEGRATIONS_OPENAI_BASE_URL
+   Model: "gpt-4o-mini"
+   If NODE_ENV=production and keys missing: return 503 { code: "AI_UNAVAILABLE" }
+   In dev without keys: return mock output (so endpoints work during development).
+
+8) Prompt templates (MUST use these exact behaviors):
+   - System: educational writing tutor, no cheating, no evasion, no fake citations; use (Source needed) placeholders.
+   - Outline: thesis + 3–5 sections + counterargument + conclusion + 5 search keywords.
+   - Draft: uses outlineText; length ±10%; adds “What to verify” checklist.
+   - Revise: improved version + 5 bullet improvement summary.
+   - Style-edit: modes (clearer, formal, casual, shorten, flow, grammar). No new facts.
+   - Clean: removes HTML tags, zero-width chars, directional marks, normalizes whitespace. Returns stats.
+
+9) Responses:
+   /outline -> { outline: string }
+   /draft -> { draft: string }
+   /revise -> { revised: string }
+   /style-edit -> { edited: string }
+   /clean -> { cleanedText: string, stats: {...} }
+
+10) Error handling:
+   401 if not logged in
+   403 with JSON: { type:"PAYWALL_REQUIRED", planRequired:"BASE"|"PRO" }
+   429 rate limits
+   503 AI unavailable
+
+DELIVERABLES:
+- server/writing.ts created
+- server/routes.ts updated to mount it
+- If you add any helper file, keep it minimal and only for rate limiting.
+After implementing, show me:
+- The full contents of server/writing.ts
+- The exact diff snippet added to server/routes.ts
+Then stop.

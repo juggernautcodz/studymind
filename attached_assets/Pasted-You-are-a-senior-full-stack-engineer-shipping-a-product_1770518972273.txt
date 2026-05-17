@@ -1,0 +1,61 @@
+You are a senior full-stack engineer shipping a production student app called StudyMind.
+
+STACK (must follow exactly)
+- Frontend: React Native + Expo SDK 54 (iOS/Android/Web), React Navigation v7, React Query, styling ONLY with React Native StyleSheet (no CSS, no Tailwind).
+- Backend: Node.js + Express.js 5 in TypeScript, REST API, file processing, AI orchestration (OpenAI).
+- DB: Neon Postgres via Prisma.
+
+GOALS
+1) Make the app look + feel more professional (polished UI, consistent typography/spacing, accessible, trustworthy).
+2) Make the codebase production-quality (clean architecture, strong typing, predictable state, safe error handling, good testing hooks).
+
+NON-NEGOTIABLES
+- Do NOT introduce new UI/styling frameworks (no Tailwind, no CSS-in-JS libraries).
+- Keep React Query for server state. Use React Navigation v7 patterns.
+- No secrets in code. Use environment variables and secure config patterns.
+- No “demo” shortcuts. Assume real Play Store users and flaky networks.
+
+DELIVERABLES (do all of these)
+A) UI/UX polish
+- Create a small design system using StyleSheet: spacing scale, type scale, colors, radii, shadows, and reusable components:
+  Button, TextField, Card, ScreenContainer, SectionHeader, EmptyState, LoadingState, ErrorState.
+- Apply consistent spacing and typography across key screens.
+- Improve perceived quality: proper loading skeletons/spinners, disabled states, haptics where appropriate, friendly but professional microcopy.
+- Ensure accessibility: tap targets, contrast, font scaling support.
+
+B) Frontend code quality
+- Organize folders cleanly: /components, /screens, /navigation, /features, /hooks, /services, /utils, /theme.
+- Make navigation typed (TypeScript param lists) and consistent.
+- Use React Query best practices: query keys, retries, staleTime, optimistic updates only when safe.
+- Centralize API client with typed responses + error mapping.
+- Add robust error boundaries and user-safe error messages.
+
+C) Backend code quality
+- Use an Express 5 structure: /routes, /controllers, /services, /middleware, /lib, /prisma.
+- Validate inputs (zod preferred) and return consistent error shapes:
+  { error: { code, message, details? } }
+- Add request logging, correlation IDs, and safe error logging (no PII, no tokens).
+- Add rate limiting for expensive endpoints (transcription/AI).
+- Implement background job pattern (simple in-process queue is fine if you can’t add infra), with status endpoints for the client to poll.
+
+D) Prisma / DB
+- Ensure schemas use proper indexes and relations.
+- Use transactions where needed.
+- Avoid N+1 patterns.
+- Add migrations-safe changes.
+
+E) Quality gates
+- Add lint/format scripts and enforce strict TypeScript.
+- Add unit tests for critical utilities + API validation, and at least 1 integration test for a key endpoint.
+- Add a short README with local setup, env vars, and run commands.
+
+PROCESS (must follow)
+1) First: summarize what you will change and what files you will touch.
+2) Then: implement changes in small steps, making sure the app still runs after each step.
+3) For every major change, include:
+   - why it improves professionalism
+   - how it affects UX
+   - how it affects reliability/performance
+4) If you need to make assumptions, list them clearly and proceed with the best default.
+
+IMPORTANT: Prefer incremental refactors over rewrites. Preserve existing behavior unless clearly improving UX or fixing a bug.

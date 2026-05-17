@@ -1,0 +1,11 @@
+node_modules
+dist
+server_dist
+.git
+.expo
+.github
+.agents
+.claude
+.config
+*.log
+ts-errors.txt

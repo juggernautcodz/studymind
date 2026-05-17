@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "StudyMind",
+    "slug": "studymind",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "studymind",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.studymind.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "StudyMind needs microphone access to record your lectures for transcription and study material generation.",
+        "NSCameraUsageDescription": "StudyMind needs camera access to capture whiteboard notes, textbook pages, and handwritten notes for OCR text extraction.",
+        "NSPhotoLibraryUsageDescription": "StudyMind needs photo library access to import images of notes and textbook pages for OCR text extraction."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "softwareKeyboardLayoutMode": "resize",
+      "predictiveBackGestureEnabled": false,
+      "package": "com.studymind.app",
+      "versionCode": 11,
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F8F9FA",
+          "dark": {
+            "backgroundColor": "#0F1114"
+          }
+        }
+      ],
+      "expo-web-browser",
+      "expo-audio",
+      "expo-image",
+      "expo-localization",
+      "expo-sharing"
+    ],
+    "experiments": {
+      "reactCompiler": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "13ed4d47-8647-4771-a980-2b42cb026ab4"
+      }
+    },
+    "owner": "shanethetester"
+  }
+}

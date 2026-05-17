@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                 String              @id @default(uuid())
+  email              String              @unique
+  passwordHash       String
+  name               String?
+  pushToken          String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  courses            Course[]
+  entitlement        Entitlement?
+  exams              Exam[]
+  flashcardStats     FlashcardStat[]
+  mindmapNodes       MindmapNode[]
+  purchases          Purchase[]
+  quizAttempts       QuizAttempt[]
+  recordings         Recording[]
+  semesters          Semester[]
+  subscriptionStatus SubscriptionStatus?
+  topics             Topic[]
+  usage              Usage[]
+}
+
+model SubscriptionStatus {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  platform         String
+  status           String    @default("inactive")
+  productId        String?
+  currentPeriodEnd DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Purchase {
+  id                           String    @id @default(uuid())
+  userId                       String
+  platform                     String
+  productId                    String
+  purchaseTokenOrTransactionId String    @unique
+  rawReceiptJson               String?
+  verifiedAt                   DateTime?
+  createdAt                    DateTime  @default(now())
+  user                         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Entitlement {
+  id        String    @id @default(uuid())
+  userId    String    @unique
+  plan      String    @default("FREE")
+  expiresAt DateTime?
+  source    String    @default("free")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Usage {
+  id                       String   @id @default(uuid())
+  userId                   String
+  monthKey                 String
+  recordingsCount          Int      @default(0)
+  transcriptionMinutesUsed Float    @default(0)
+  storageBytesUsed         Int      @default(0)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, monthKey])
+}
+
+model Semester {
+  id        String    @id @default(uuid())
+  userId    String
+  name      String
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  courses   Course[]
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Course {
+  id           String        @id @default(uuid())
+  userId       String
+  semesterId   String
+  name         String
+  color        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  semester     Semester      @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mindmapNodes MindmapNode[]
+  topics       Topic[]
+
+  @@index([userId])
+  @@index([semesterId])
+}
+
+model Topic {
+  id               String            @id @default(uuid())
+  userId           String
+  courseId         String
+  name             String
+  orderIndex       Int               @default(0)
+  transcript       String?
+  notes            String?
+  status           String            @default("pending")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  flashcards       Flashcard[]
+  quizzes          Quiz[]
+  recordings       Recording[]
+  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whiteboardImages WhiteboardImage[]
+
+  @@index([userId])
+  @@index([courseId])
+}
+
+model Recording {
+  id               String   @id @default(uuid())
+  userId           String
+  topicId          String
+  filename         String
+  filepath         String
+  durationSeconds  Float?
+  transcriptStatus String   @default("pending")
+  transcript       String?
+  createdAt        DateTime @default(now())
+  topic            Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+}
+
+model Flashcard {
+  id         String          @id @default(uuid())
+  topicId    String
+  front      String
+  back       String
+  orderIndex Int             @default(0)
+  createdAt  DateTime        @default(now())
+  topic      Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  stats      FlashcardStat[]
+
+  @@index([topicId])
+}
+
+model FlashcardStat {
+  id           String    @id @default(uuid())
+  userId       String
+  flashcardId  String
+  timesCorrect Int       @default(0)
+  timesWrong   Int       @default(0)
+  lastReviewed DateTime?
+  nextReview   DateTime?
+  easeFactor   Float     @default(2.5)
+  interval     Int       @default(1)
+  flashcard    Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, flashcardId])
+  @@index([userId])
+}
+
+model Quiz {
+  id        String         @id @default(uuid())
+  topicId   String
+  title     String
+  createdAt DateTime       @default(now())
+  topic     Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  attempts  QuizAttempt[]
+  questions QuizQuestion[]
+
+  @@index([topicId])
+}
+
+model QuizQuestion {
+  id            String  @id @default(uuid())
+  quizId        String
+  question      String
+  options       String
+  correctAnswer Int
+  explanation   String?
+  orderIndex    Int     @default(0)
+  quiz          Quiz    @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId])
+}
+
+model QuizAttempt {
+  id             String   @id @default(uuid())
+  userId         String
+  quizId         String
+  score          Int
+  totalQuestions Int
+  answers        String
+  completedAt    DateTime @default(now())
+  quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([quizId])
+}
+
+model WhiteboardImage {
+  id        String   @id @default(uuid())
+  topicId   String
+  filename  String
+  filepath  String
+  ocrText   String?
+  createdAt DateTime @default(now())
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+}
+
+model MindmapNode {
+  id         String   @id @default(uuid())
+  userId     String
+  courseId   String
+  parentId   String?
+  nodeType   String
+  title      String
+  depth      Int      @default(0)
+  orderIndex Int      @default(0)
+  metadata   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([parentId])
+}
+
+model Exam {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  examDate  DateTime
+  topicIds  String
+  studyPlan String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Job {
+  id        String   @id @default(uuid())
+  userId    String   @default("anonymous-guest-user")
+  type      String
+  status    String   @default("pending")
+  input     String?
+  output    String?
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+}

@@ -1,0 +1,122 @@
+entrypoint = "README.md"
+modules = ["nodejs-20", "postgresql-16", "python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["ffmpeg", "yt-dlp", "deno", "glib", "gtk3", "nspr", "nss", "mesa", "libdrm", "libxkbcommon", "alsa-lib"]
+
+[deployment]
+deploymentTarget = "autoscale"
+build = ["sh", "-c", "node scripts/build.cjs"]
+run = ["sh", "-c", "NODE_ENV=production PORT=5000 node server_dist/index.mjs"]
+
+[[ports]]
+localPort = 3001
+externalPort = 3000
+
+[[ports]]
+localPort = 3002
+externalPort = 3002
+
+[[ports]]
+localPort = 3003
+externalPort = 6000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 6800
+
+[[ports]]
+localPort = 5173
+externalPort = 5173
+
+[[ports]]
+localPort = 5555
+externalPort = 3003
+
+[[ports]]
+localPort = 8081
+externalPort = 3001
+
+[[ports]]
+localPort = 8082
+externalPort = 4200
+
+[[ports]]
+localPort = 8083
+externalPort = 5000
+
+[[ports]]
+localPort = 8084
+externalPort = 8000
+
+[env]
+PORT = "5000"
+# Replit may inject DATABASE_URL as Postgres. We ignore it and use SQLite explicitly.
+SQLITE_DATABASE_URL = "file:./prisma/dev.db"
+
+[agent]
+stack = "EXPO"
+integrations = ["stripe:2.0.0", "javascript_openai_ai_integrations:2.0.0"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start Backend"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start Frontend"
+
+[[workflows.workflow]]
+name = "Start Backend"
+author = "agent"
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow]]
+name = "Start Frontend"
+author = "agent"
+mode = "sequential"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx expo start --web --clear --port 8081"
+waitForPort = 8081
+
+[userenv]
+
+[userenv.shared]
+
+[userenv.development]
+PORT = "5000"
+NODE_ENV = "development"
+EXPO_NO_PROMPT = "1"
+SQLITE_DATABASE_URL = "file:./prisma/dev.db"
+
+[userenv.production]
+PORT = "5000"
+NODE_ENV = "production"
+# Use a separate prod DB file in Deployments if you want, but this MUST be set to a file: URL.
+SQLITE_DATABASE_URL = "file:./prisma/prod.db"

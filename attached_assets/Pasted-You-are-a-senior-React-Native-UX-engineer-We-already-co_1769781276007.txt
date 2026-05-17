@@ -1,0 +1,78 @@
+You are a senior React Native UX engineer.
+
+We already completed an initial pass:
+- Card style prop type fix
+- Toast confirmations across screens
+- Shorter microcopy
+- Fixed TS/LSP errors (flashcards, quiz questions, mockAI typing)
+- Added docs/SYSTEM_ARCHITECTURE.md and REPORT_FOR_CHATGPT.md
+
+Now do Iteration 2 focused on FLOW, PREMIUM UX, and COMPLAINT AVOIDANCE.
+Do NOT rebuild the app. Upgrade/refactor existing screens and components only.
+
+Top complaints to prevent:
+1) “Confusing / too many steps”
+2) “Paywall blocks usefulness”
+3) “Feels buggy / inconsistent”
+4) “Too many features / clutter”
+5) “I don’t know what to do next”
+
+Hard constraints:
+- Keep React Native StyleSheet.create()
+- Keep theme tokens in client/constants
+- Improve existing components in client/components (don’t add heavy UI libraries)
+- No long explanations in output; implement changes
+
+Goals:
+A) Reduce taps:
+- From Dashboard to starting a lecture recording: <= 2 taps
+- From Dashboard to “Study Today” start: <= 2 taps
+
+B) Make LectureScreen the single “hub”:
+- Add a clear pipeline status header with compact chips:
+  Recording, Transcript, Notes, Flashcards, Quiz, Mindmap, Whiteboard
+- Add “Next best action” CTA that changes based on status:
+  Record → Generate Notes → Generate Flashcards → Generate Quiz → Study Today
+
+C) Premium consistency:
+- Standardize spacing/typography across all screens
+- Replace inconsistent list rows with one consistent ListItem style
+- Add skeleton/loading states for:
+  Dashboard lists, Course topics, Lecture content, Mindmap load
+
+D) Mindmap usability:
+- Add a node detail bottom sheet/drawer:
+  shows counts and quick actions: Study flashcards, Start quiz, View notes
+- Make add/rename/delete actions obvious and safe (confirm destructive)
+
+E) Paywall that avoids anger:
+- Do NOT block basic note-taking and viewing behind paywall
+- FREE must allow a complete “wow” loop at least once:
+  Record → Transcript → Notes → Flashcards (limited)
+- PRO gates:
+  Quizzes, Exam Mode advanced, adaptive spaced repetition, analytics
+- Update BillingScreen copy to be outcome-based, not feature-bloated
+- Add “Restore purchases” and “Reviewer/demo access” note if applicable
+
+F) Error-proofing:
+- Ensure all async actions have:
+  loading state, disable buttons while running, error toast, retry button
+- Ensure all create flows (semester/course/topic/lecture) end with:
+  toast + auto-navigate to the next logical screen
+
+Files to prioritize (in order):
+1) client/screens/DashboardScreen.tsx
+2) client/screens/LectureScreen.tsx
+3) client/screens/RecordScreen.tsx
+4) client/screens/MindmapScreen.tsx
+5) client/screens/StudyTodayScreen.tsx
+6) client/screens/BillingScreen.tsx
+7) client/screens/CourseScreen.tsx
+8) client/screens/SemesterScreen.tsx
+9) client/screens/ExamModeScreen.tsx
+Then any supporting components in client/components.
+
+Deliverables:
+- Implement the changes in the code
+- Keep the app compiling
+- Provide a short bullet list of what changed (max 10 bullets)

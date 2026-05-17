@@ -1,0 +1,216 @@
+You are a senior full-stack engineer working inside a Replit workspace.
+
+Your task is to build a production-ready MVP of a PAID student study web app that can realistically make money.
+
+IMPORTANT GOAL
+This app must be:
+- Valuable enough that students will pay
+- Structured so I can upsell a PRO subscription later
+- Simple enough to ship quickly, but expandable
+
+TECH STACK (REPLIT-FRIENDLY)
+- Frontend: React + TypeScript + Vite (mobile-first, responsive)
+- Backend: Node.js + TypeScript + Express
+- Database: SQLite with Prisma ORM
+- Auth: Email + password with JWT
+- Payments: Stripe-ready (stubbed so the app runs without keys)
+- File storage: Local filesystem (uploads/) with clean adapter for S3/GCS later
+- AI features: Implement as provider interfaces with MOCK outputs so the app works end-to-end without external APIs
+
+APP CONCEPT
+A student study app where users:
+1) Record lectures (audio) in the browser
+2) Upload recordings → get AI-generated transcript
+3) Convert transcript → clean, structured notes
+4) Generate study materials automatically:
+   - Flashcards
+   - Quizzes (multiple choice MVP)
+5) Organize everything visually using a MIND MAP (Mindly-style)
+6) Upload photos of whiteboards/slides → OCR → attach to notes
+7) Organize by:
+   Semester → Course → Topic → Lecture
+
+MONETIZATION (CRITICAL)
+Design the app so it can generate revenue.
+
+PLANS
+- FREE:
+  - Limited total recordings (ex: 2 lifetime)
+- BASE (paid unlock / license):
+  - More recordings (ex: 20 per month)
+  - Notes + flashcards
+- PRO (subscription):
+  - High or unlimited recordings
+  - Quizzes
+  - Adaptive review
+  - Exam mode
+  - Export features (PDF later)
+
+Implement:
+- plan = 'FREE' | 'BASE' | 'PRO'
+- Usage counters:
+  - recordingsCountThisMonth
+  - transcriptionMinutesUsed
+- Enforce limits in backend middleware
+- Stripe integration as STUBS:
+  - POST /billing/create-checkout-session
+  - POST /billing/webhook
+  App must run without Stripe keys (demo mode)
+
+CORE DIFFERENTIATORS (WHY THIS APP WINS)
+These features must be present in MVP logic (even if simple):
+
+1) AI STUDY PIPELINE (mocked but real structure)
+   Recording → Transcript → Notes → Flashcards → Quiz → Mind Map
+
+2) MIND MAP DATA MODEL
+Use a tree structure:
+- mindmap_nodes:
+  id, userId, courseId, parentId, nodeType
+  ('semester','course','topic','lecture','concept')
+  title, depth, orderIndex, createdAt
+
+Link content using join tables:
+- node_notes
+- node_flashcards
+- node_quizzes
+- node_whiteboard_images
+
+3) ADAPTIVE STUDY ENGINE (simple MVP)
+Track:
+- flashcards answered wrong
+- quiz accuracy
+Expose:
+- “Study Today” list (topics with lowest scores)
+
+4) EXAM MODE (simple)
+User sets:
+- exam date
+- topics
+App generates:
+- daily study checklist
+- mock quiz (from existing questions)
+
+FEATURES TO IMPLEMENT (MVP)
+A) Auth
+- Signup / login
+- JWT middleware
+
+B) CRUD structure
+- Semesters
+- Courses
+- Topics
+- Lectures
+
+C) Recording
+- Browser MediaRecorder
+- Upload audio
+- Create Recording record
+- Trigger transcription job (mock)
+
+D) AI Jobs (MOCK PROVIDERS)
+Create providers with fake but believable output:
+- TranscriptionProvider
+- NotesProvider
+- FlashcardsProvider
+- QuizProvider
+- OcrProvider
+- MindmapAutoProvider
+
+Store outputs in DB as if they were real.
+
+E) Whiteboard Capture
+- Upload image
+- OCR provider returns extracted text
+- Attach to lecture + mind map node
+
+F) UI PAGES (React Router)
+- /login
+- /dashboard
+- /courses/:courseId
+- /mindmap/:courseId
+- /lectures/:lectureId/record
+- /lectures/:lectureId/notes
+- /lectures/:lectureId/flashcards
+- /lectures/:lectureId/quiz
+- /lectures/:lectureId/whiteboard
+- /pricing
+
+G) Mind Map UI (MVP)
+- Left: tree list with indentation
+- Click node → open detail panel
+- Show:
+  - notes excerpt
+  - flashcard count
+  - quiz count
+  - whiteboard images
+- Allow:
+  - add node
+  - rename node
+  - reorder
+  - delete
+
+API ENDPOINTS
+Auth:
+- POST /api/auth/signup
+- POST /api/auth/login
+- GET  /api/auth/me
+
+Structure:
+- /api/semesters
+- /api/courses
+- /api/topics
+- /api/lectures
+
+Recording & AI:
+- POST /api/recordings/upload
+- POST /api/transcription/request
+- GET  /api/jobs/:jobId
+- POST /api/lectures/:lectureId/notes/generate
+- POST /api/lectures/:lectureId/flashcards/generate
+- POST /api/lectures/:lectureId/quizzes/generate
+
+Mind Map:
+- GET  /api/mindmap/:courseId
+- POST /api/mindmap/:courseId/nodes
+- PUT  /api/mindmap/nodes/:nodeId
+- DELETE /api/mindmap/nodes/:nodeId
+- POST /api/mindmap/:courseId/auto-generate
+
+Whiteboard:
+- POST /api/whiteboard/upload
+- GET  /api/lectures/:lectureId/whiteboards
+
+PROJECT STRUCTURE (MONOREPO)
+- /apps/web
+- /apps/api
+- /packages/shared (types + zod schemas)
+- /prisma (schema + migrations)
+- root package.json with concurrent dev scripts
+
+REQUIREMENTS
+- Use Zod for validation
+- Prisma for DB
+- Multer for uploads
+- Clear separation of concerns
+- App must run locally in Replit with:
+  npm install
+  npm run dev
+
+WHAT TO OUTPUT
+1) Full codebase
+2) Prisma schema
+3) Setup instructions
+4) Demo flow showing how a user:
+   - creates a course
+   - records a lecture
+   - gets notes, flashcards, quiz
+   - sees it in the mind map
+   - hits a paywall and is prompted to upgrade
+
+START NOW
+Begin by:
+1) Confirming stack choices
+2) Generating the repo structure
+3) Implementing the backend first, then frontend
+Do not stop until both run together with npm run dev.

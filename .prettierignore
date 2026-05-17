@@ -1,0 +1,13 @@
+node_modules
+.cache
+.local
+.pythonlibs
+server_dist
+static-build
+android
+ios
+dist
+build
+coverage
+*.log
+prisma/migrations

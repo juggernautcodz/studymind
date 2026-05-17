@@ -1,0 +1,136 @@
+You are a senior mobile + backend engineer working in a Replit workspace.
+
+GOAL
+Build the monetization system for my student study app so it can ship on:
+- Apple App Store (iOS)
+- Google Play Store (Android)
+
+IMPORTANT POLICY CONSTRAINT (MUST FOLLOW)
+This app sells DIGITAL FEATURES/content (AI transcription, notes, flashcards, quizzes, mind map, storage). Therefore:
+- Payments for unlocking features inside the iOS/Android apps MUST use platform In-App Purchases (IAP).
+- Do NOT implement Stripe checkout inside the mobile apps.
+- Do NOT link to external payment pages from the mobile apps.
+- You may implement Stripe ONLY for a separate web version later, but do not reference it from the mobile apps.
+
+WHAT TO BUILD (DELIVERABLES)
+Create a complete “Billing & Entitlements” module with:
+1) Product/Plan design
+2) Client integration (iOS + Android)
+3) Backend receipt validation + entitlement issuance
+4) Usage limits enforcement and paywall logic
+5) Test/sandbox instructions
+
+PLANS + PRODUCTS
+Implement these tiers:
+
+A) FREE (default)
+- Limit: 2 total lecture recordings lifetime (or 30 minutes total transcription)
+- Notes view only for generated content
+- No quizzes
+- Clear upgrade prompts
+
+B) BASE (one-time purchase / non-consumable)
+- “Lifetime Unlock – Base”
+- Unlocks: mind map + notes + flashcards
+- Includes monthly AI allowance (example: 60 min transcription/month)
+
+C) PRO (auto-renewing subscription)
+- Monthly and yearly options
+- Unlocks: quizzes + exam mode + adaptive review + much higher AI allowance (example: 300 min/mo)
+- Adds export features placeholder
+
+REPLIT BUILD REQUIREMENTS
+- Backend: Node.js + TypeScript + Express
+- Database: SQLite + Prisma (Replit-friendly)
+- Shared types: Zod + a shared “entitlements” schema
+- Frontend code should be provided as platform-agnostic pseudocode OR React Native / Flutter examples (choose one), BUT ensure it is clearly separated from the backend and can be reused.
+- Do NOT require Apple/Google keys to run locally; provide stubs/mocks for local dev.
+
+BACKEND DESIGN (MUST IMPLEMENT)
+Database tables/models:
+- User: id, email, passwordHash, createdAt
+- SubscriptionStatus: userId, platform ('ios'|'android'), status ('active'|'inactive'|'trial'|'grace'|'canceled'), productId, currentPeriodEnd, updatedAt
+- Purchase: id, userId, platform, productId, purchaseTokenOrTransactionId, rawReceiptJson, verifiedAt, createdAt
+- Entitlement: userId, plan ('FREE'|'BASE'|'PRO'), expiresAt (nullable), source ('iap'), updatedAt
+- Usage: userId, monthKey (YYYY-MM), recordingsCount, transcriptionMinutesUsed, storageBytesUsed
+
+Endpoints:
+Auth:
+- POST /api/auth/signup
+- POST /api/auth/login
+- GET  /api/auth/me
+
+Billing:
+- GET  /api/billing/products
+  Returns productIds + display names + prices (placeholder) + plan mapping.
+- POST /api/billing/verify
+  Body includes:
+  - platform: 'ios' | 'android'
+  - productId
+  - purchaseToken or transactionId
+  - receiptData (ios base64 or json)
+  - userId inferred from auth
+  Behavior:
+  - Validate receipt/token using platform-specific validator module
+  - Store Purchase record
+  - Update SubscriptionStatus and Entitlement
+  - Return current entitlements + limits
+- GET /api/billing/entitlements
+  Returns plan + limits + usage
+
+Paywall / limits:
+- Middleware: requireEntitlement(feature)
+- Enforce:
+  - recording upload limits by plan + usage
+  - transcription job creation limits by plan + usage
+- Return structured “PAYWALL_REQUIRED” error with:
+  - planRequired
+  - upgradeOptions
+  - currentUsage
+  - limit
+
+VALIDATION MODULES (IMPLEMENT STUBS)
+Create separate modules that can be swapped for real integrations:
+- /billing/iosReceiptValidator.ts
+  - function verifyIosReceipt(receiptData): returns {valid, productId, expiresAt, status, originalTransactionId}
+  - In local dev, accept a “TEST_RECEIPT” value and return valid=true
+- /billing/androidPurchaseValidator.ts
+  - function verifyAndroidPurchase(purchaseToken, productId): returns {valid, productId, expiresAt, status, orderId}
+  - In local dev, accept “TEST_TOKEN” and return valid=true
+
+IMPORTANT: Also include notes in code comments explaining how to replace stubs with:
+- Apple receipt verification (StoreKit / App Store Server API)
+- Google Play Developer API purchase/subscription validation
+
+FRONTEND/PAYWALL LOGIC (PROVIDE EXAMPLE CODE)
+Provide example client-side flow (choose React Native or Flutter):
+- Fetch /api/billing/products
+- Show Pricing screen (FREE/BASE/PRO)
+- Trigger IAP purchase for selected productId
+- Send receipt/token to /api/billing/verify
+- Cache entitlements locally
+- Gate features:
+  - quizzes/exam mode require PRO
+  - mindmap + flashcards require BASE or PRO
+  - recording/transcription limited by usage counters
+
+TESTING INSTRUCTIONS
+Include:
+- How to run backend + prisma migrations in Replit
+- How to simulate iOS/Android verification in local dev using TEST_RECEIPT / TEST_TOKEN
+- How to unit test entitlement logic
+- What needs to be done later in real stores:
+  - set up products (non-consumable + subscriptions)
+  - sandbox testing users
+  - production receipt validation steps
+
+OUTPUT FORMAT
+1) Provide full code for the backend module (Express + Prisma schema + routes + middleware).
+2) Provide example client implementation (Pricing screen + verify flow) in the chosen framework.
+3) Provide a README with setup + testing steps.
+
+Start now by:
+- generating the Prisma schema changes,
+- implementing the billing routes,
+- implementing entitlement middleware,
+- then providing the example client paywall flow.

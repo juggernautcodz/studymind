@@ -1,0 +1,194 @@
+Got it — mobile-first + Play Store approval. Paste this into Replit Agent as-is.
+
+---
+
+## Replit Agent Prompt (Mobile + Google Play Store)
+
+**Goal:** Ship a production-ready Android app that records real audio, sends it to backend for real transcription + AI-generated notes/flashcards/quizzes (no placeholder/mock), and meets Google Play policies (permissions, disclosures, privacy).
+
+### A) Environment + “Real AI” enablement (server)
+
+1. In Replit Secrets (or deployment env), set:
+
+* `AI_INTEGRATIONS_OPENAI_API_KEY` = `<your key>`
+* `AI_INTEGRATIONS_OPENAI_BASE_URL` = `https://api.openai.com/v1`
+
+2. Restart server and confirm `USE_REAL_AI` becomes true (log it once on startup).
+
+### B) Fix the core architecture mismatch: lectures are local-only but AI endpoints require Prisma lecture rows
+
+**Problem:** Client creates lectures in AsyncStorage, but server AI routes use Prisma and return 404 => client falls back to mock.
+
+**Fix (minimal and correct):** Make server the source-of-truth id for lectures. Store that as `serverId` on the local lecture object.
+
+#### B1) Add or confirm lecture endpoints on server
+
+Implement (or verify existing) routes:
+
+1. `POST /api/lectures`
+
+* Input: `{ title: string, courseId?: string }`
+* Output: `{ id: string }` (Prisma lecture id)
+
+2. `PATCH /api/lectures/:id`
+
+* Input can include `{ transcript?, notes?, flashcards?, quiz? }`
+* Output: updated lecture or `{ ok: true }`
+
+Ensure these routes use the same auth/userId scheme as other endpoints (or if no auth exists, allow for now).
+
+#### B2) Client: when creating a lecture, also create it on server
+
+In:
+
+* `client/screens/CourseScreen.tsx`
+* `client/screens/DashboardScreen.tsx`
+
+Replace/augment `storage.createLecture(...)`:
+
+1. Call `POST ${getApiUrl()}/api/lectures` with `{ title, courseId }`
+2. Receive `{ id: serverId }`
+3. Store locally with `serverId` included
+4. Use `serverId` for all AI calls and transcription.
+
+Update local lecture types/interfaces to include `serverId: string`.
+
+#### B3) Client: LectureScreen must use serverId for AI generation endpoints
+
+In `client/screens/LectureScreen.tsx`, anywhere it uses the local lecture id in:
+
+* `/api/lectures/:lectureId/notes/generate`
+* `/api/lectures/:lectureId/flashcards/generate`
+* `/api/lectures/:lectureId/quizzes/generate`
+
+Change `lectureId` to `lecture.serverId`. If missing, show an error “Lecture not synced” and block AI actions.
+
+### C) Make the record button actually record, upload, transcribe, then generate
+
+**Problems:**
+
+* Client sends multipart FormData but server expects JSON with `audioBase64`.
+* Server returns `jobId` (async), but client expects transcript text immediately.
+* Client falls back to mock transcript when transcriptText is empty.
+
+**Fix approach:** Keep server async jobs. Update client to (1) record, (2) base64 encode, (3) send JSON, (4) poll jobs endpoint, (5) save transcript, (6) generate notes/cards/quizzes from real transcript.
+
+#### C1) Ensure recording works on Android (Expo)
+
+In `client/screens/RecordScreen.tsx`:
+
+1. Confirm use of `expo-av` Audio recording OR `expo-audio` is configured correctly for Android.
+2. Request mic permissions using the correct Expo permission API.
+3. Ensure a real `recordingUri` is produced on stop.
+4. Add error handling: if no URI, show a visible error, do not silently continue.
+
+#### C2) Convert recorded audio to base64 and send JSON
+
+Add dependency/use:
+
+* `expo-file-system`
+
+After recording stops:
+
+1. `const audioBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });`
+2. POST to transcription request:
+
+```js
+fetch(`${apiUrl}/api/ai/transcription/request`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    lectureId: lecture.serverId,
+    audioBase64,
+    durationMinutes: 5
+  })
+})
+```
+
+#### C3) Poll job endpoint until transcript is ready
+
+After receiving `{ jobId }`:
+
+1. Poll `GET ${apiUrl}/api/jobs/${jobId}` every 1000ms up to 90 seconds.
+2. When `status === "complete"`, read transcript from `job.result.transcript` (standardize server to this).
+3. If `status === "failed"`, show error with message.
+4. Remove all automatic fallback-to-mock transcript logic. If failure, show error UI.
+
+#### C4) Server: standardize job output fields
+
+In `server/ai-providers.ts`:
+
+* Ensure transcription job sets:
+
+```ts
+job.status = "complete";
+job.result = { transcript: "<text>" };
+```
+
+* Ensure `/api/jobs/:jobId` returns `status` and `result.transcript`.
+
+#### C5) Save transcript to server + local
+
+Once transcript is ready:
+
+1. `PATCH /api/lectures/:serverId` with `{ transcript }`
+2. Update local lecture transcript too (AsyncStorage update).
+
+### D) Remove mock AI usage in production paths
+
+**Requirement:** No placeholder/mock notes/flashcards/quizzes shown in production.
+
+In:
+
+* `client/screens/LectureScreen.tsx`
+* `client/screens/RecordScreen.tsx`
+
+1. Delete/disable fallbacks that call `client/lib/mockAI.ts`.
+2. If AI generation fails, show an error and keep existing content (don’t overwrite with mock).
+3. Optionally keep mock for development behind a flag:
+
+* `EXPO_PUBLIC_USE_MOCK_AI=true` only in dev builds; default false.
+
+### E) Fix getApiUrl for Android release builds
+
+In `client/lib/query-client.ts`:
+
+* Don’t hard crash when `EXPO_PUBLIC_DOMAIN` missing.
+* For mobile builds, require an explicit `EXPO_PUBLIC_API_URL` (recommended).
+  Implement:
+
+1. If `process.env.EXPO_PUBLIC_API_URL` exists, use it.
+2. Else if `EXPO_PUBLIC_DOMAIN` exists, derive from that.
+3. Else show a clear runtime error screen explaining you must set API URL for production.
+
+### F) Google Play Store requirements (permissions + disclosures)
+
+1. Android permissions:
+
+* Ensure only `RECORD_AUDIO` (and maybe storage if needed) is requested.
+* Explain in-app why microphone is needed before requesting permission.
+
+2. Privacy Policy:
+
+* Add a privacy policy URL (hosted page) and include it in Play Console.
+* State: audio is recorded, uploaded to your server and/or OpenAI for transcription/generation.
+
+3. Data safety:
+
+* If audio/transcripts are stored, disclose it.
+* If you allow deleting lectures, implement delete endpoint and UI.
+
+4. Disable recording on web (not needed) and ensure Android-only path is solid.
+
+### G) Acceptance tests
+
+1. Create lecture => verify server lecture exists and local lecture stores `serverId`.
+2. Record on Android => verify file is created, base64 sent, job completes, transcript appears.
+3. Generate notes/flashcards/quiz => verify content is not mock and persists.
+4. Turn off OpenAI env vars => app should show “AI not configured” error, NOT mock content.
+
+Deliver: a PR/patch with all above changes.
+
+---
+
+If you want one extra line to help Replit Agent: **“Do not implement web audio; this is Android-focused only.”**

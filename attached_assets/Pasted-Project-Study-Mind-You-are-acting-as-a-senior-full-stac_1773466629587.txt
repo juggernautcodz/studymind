@@ -1,0 +1,107 @@
+Project: Study-Mind
+
+You are acting as a senior full-stack debugging engineer.
+
+Your task is to audit and fix the entire backend + sync pipeline in one pass so the core mobile flow works reliably.
+
+Stack:
+
+* Mobile: Expo / React Native
+* Backend: Node.js + Express
+* Database: Prisma
+* Hosting/Dev: Replit
+* Client tests happen primarily on phone using Expo Go
+
+Primary goal:
+Make this core flow work end-to-end:
+
+record lecture
+→ sync semester
+→ sync course
+→ sync topic
+→ upload/process audio
+→ generate notes
+→ generate flashcards
+→ generate quiz
+
+Current known symptoms:
+
+* `/api/health` works
+* semester / course / topic sync has failed at various times
+* Prisma client generation has failed before
+* port 5000 has been stuck before
+* auth fallback and guest flows may be inconsistent
+* mobile app has shown errors like:
+
+  * Failed to sync semester
+  * Cannot sync course - semester sync failed
+  * Cannot sync topic - course sync failed
+  * Topic could not be synced to server
+* browser/deployed web has had CORS problems before
+* Expo/Replit environment has had restart instability before
+
+Your mission:
+Audit the system and fix the minimum necessary code so the backend and sync chain are stable.
+
+Audit checklist:
+
+1. Verify Prisma client is generated and usable.
+2. Verify backend startup is resilient and doesn’t crash on port reuse.
+3. Verify CORS/server origin config is correct for Replit deployment and Expo/mobile usage.
+4. Verify auth flows:
+
+   * real login/signup
+   * guest fallback
+   * no fake local tokens should break server sync
+5. Verify `client/lib/query-client.ts` resolves the correct backend URL.
+6. Verify `client/lib/serverSync.ts` correctly syncs:
+   semester → course → topic
+   using real server IDs where required.
+7. Verify backend routes in `server/study.ts`:
+
+   * GET /semesters
+   * POST /semesters
+   * GET /courses
+   * POST /courses
+   * GET /topics
+   * POST /topics
+8. Ensure all these routes work for both authenticated and guest users.
+9. Ensure route errors return useful details for debugging.
+10. Verify the recording flow in `client/screens/RecordScreen.tsx` does not double-stop or crash the recorder.
+11. Remove any bad navigator/debug leftovers or circular dependencies that obviously break runtime.
+
+Fix rules:
+
+* Prefer the smallest safe fix.
+* Do not rewrite the architecture unless necessary.
+* Do not remove features unless they are clearly dead/debug code.
+* Keep response shapes compatible with existing frontend code.
+* Preserve guest mode if present.
+* Use defensive fallbacks where appropriate:
+  `const userId = req.user?.id || ANONYMOUS_USER_ID`
+* If Prisma relation queries are correct, do not simplify them unnecessarily.
+* If a route fails, log the exact error and include:
+  `{ error: "...", details: String(error) }`
+
+Success criteria:
+
+1. Backend starts cleanly.
+2. `/api/health` returns 200.
+3. `/api/semesters` returns 200.
+4. `/api/courses` returns 200.
+5. `/api/topics` returns 200 or expected empty-state response.
+6. POST semester/course/topic routes work without 500 errors.
+7. Mobile sync chain no longer fails at semester → course → topic.
+8. Record flow can proceed without recorder crash.
+
+Output format:
+
+1. List the files you changed.
+2. Explain the root causes found.
+3. Show the exact code changes.
+4. Show the commands/tests you ran.
+5. State clearly whether the project is now stable or what single blocker remains.
+
+Important:
+Do not stop after fixing only one symptom.
+Audit the whole chain and fix the project in one pass.

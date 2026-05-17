@@ -1,0 +1,225 @@
+You are a senior React Native UX/UI engineer working in a Replit workspace.
+
+PROJECT CONTEXT
+React Native app using StyleSheet.create() only (no CSS/Tailwind/MUI).
+Uses a custom theme token system in client/constants (theme.ts etc.).
+Uses custom UI components in client/components (Button, Card, Badge, etc.).
+Uses React Navigation in client/navigation.
+
+Code layout:
+client/
+  components/
+  constants/
+  contexts/
+  hooks/
+  lib/
+  navigation/
+  screens/
+  types/
+
+SCREENS (exact files you must improve):
+client/screens/
+- BillingScreen.tsx
+- CourseScreen.tsx
+- DashboardScreen.tsx
+- ExamModeScreen.tsx
+- HomeScreen.tsx
+- LectureScreen.tsx
+- LoginScreen.tsx
+- MindmapScreen.tsx
+- ModalScreen.tsx
+- ProfileScreen.tsx
+- RecordScreen.tsx
+- SemesterScreen.tsx
+- SettingsScreen.tsx
+- StudyTodayScreen.tsx
+
+GOAL
+Make the app look premium, flow better, and be extremely user-friendly for students.
+Focus on navigation clarity, visual polish, and reducing friction.
+Do NOT add major new product features; improve UX, layout, and component design.
+
+HARD CONSTRAINTS (MUST FOLLOW)
+- Use StyleSheet.create() for all styling.
+- Use client/constants theme tokens (colors, spacing, typography). Avoid hardcoded values.
+- Do not introduce CSS frameworks or web UI libs.
+- Improve existing custom components in client/components rather than replacing them.
+- Add consistent empty/loading/error states across screens.
+- Add success/error toasts for important actions (save, upload, generate).
+- Maintain accessibility: tap targets 44px+, readable font sizes, good contrast.
+
+CORE FLOW TO OPTIMIZE
+Semester → Course → Lecture
+Record → Processing (Transcribe → Notes → Flashcards → Quiz → Mind Map)
+Study Today + Exam Mode for retention
+Billing paywall that feels fair and converts
+
+TASKS
+
+1) QUICK UX AUDIT (output first)
+- Identify the top 10 UX problems in the current app.
+- For each, specify: the impacted screen(s) + a concrete fix.
+
+2) NAVIGATION IMPROVEMENTS (implement)
+- Ensure navigation feels obvious:
+  - Bottom tabs recommended: Home/Dashboard, Record, Mind Map, Study, Profile/Settings
+  - Use stacks inside tabs for Semester → Course → Lecture screens
+- Make headers consistent across screens:
+  - Title styling, back button behavior, action buttons (e.g., “+ Add”)
+- Update client/navigation accordingly without breaking route names.
+
+3) DESIGN SYSTEM POLISH (implement)
+In client/components and client/constants:
+- Update theme tokens if needed to enforce:
+  - spacing scale (4/8/12/16/24/32)
+  - typography scale (title, h2, h3, body, caption)
+  - semantic colors (bg/surface/text/muted/border/primary/success/danger)
+  - consistent radius and shadow styles
+- Improve core components (keep their API stable as much as possible):
+  A) Button: variants (primary/secondary/ghost/destructive), loading, disabled
+  B) Card: consistent padding, radius, shadow, optional header slot
+  C) Badge: consistent size, semantic colors
+  D) Input/TextField: label, helper text, error state
+- Create reusable UX helpers if missing:
+  - EmptyState component (icon, title, subtitle, CTA)
+  - Toast/Snackbar system
+  - SectionHeader component
+  - ListRow component (for consistent list items)
+  - “ProcessingTimeline” component (for lecture pipeline status)
+
+4) SCREEN-SPECIFIC IMPROVEMENTS (implement in these exact files)
+You MUST refactor the following screens with better layout, hierarchy, and CTAs:
+
+A) DashboardScreen.tsx
+- Make it the primary “control center”
+- Add a “Next Best Action” card at top:
+  Examples:
+   - “Continue processing Lecture 3”
+   - “Record your next lecture”
+   - “Study Today: 12 cards”
+- Show current semester + active course context
+- Show quick access tiles/cards: Record, Mind Map, Study Today, Exam Mode
+- Add empty states if no semester/course exists with a CTA (“Create Semester”)
+
+B) SemesterScreen.tsx
+- Clear list of semesters
+- Primary CTA: “Add Semester”
+- Each semester card shows # courses
+- Empty state + CTA
+
+C) CourseScreen.tsx
+- Clean hierarchy: Topics list + lecture counts
+- Primary CTA: “Add Topic” and “Add Lecture” (or “Record Lecture”)
+- Each topic row shows progress badges (notes/cards/quizzes count)
+- Empty state + CTA
+
+D) LectureScreen.tsx
+- This is the most important screen
+- Add a premium “Lecture Overview” header:
+  - Title, date, course/topic
+  - Content status chips (Transcript/Notes/Flashcards/Quiz/Mindmap)
+- Add a “Processing Timeline” section (statuses):
+  Uploading → Transcribing → Notes → Flashcards → Quiz → Mind Map
+- Add big primary CTA buttons:
+  - Record/Upload
+  - Generate Notes
+  - Study Now
+- Add secondary actions:
+  - Whiteboard capture attachment (if exists in flow)
+  - Add/rename node in mind map
+- Ensure loading/error states and success toasts exist
+
+E) RecordScreen.tsx
+- Make recording feel premium:
+  - big timer
+  - clear start/pause/stop controls
+  - confirmation after save/upload
+  - upload/progress indicator
+- Reduce taps (record should start quickly)
+- Add helpful microcopy (“Keep phone near speaker”)
+
+F) MindmapScreen.tsx
+- Make it feel “special”
+- If it’s currently a simple list/tree, keep it but polish:
+  - Node cards with indentation and connectors (optional)
+  - Badges for counts (notes, cards, quizzes, images)
+  - Tap node → open a detail drawer/bottom sheet with:
+    - linked notes excerpt
+    - flashcards count + “Study” CTA
+    - quiz CTA
+- Add actions:
+  - Add node
+  - Rename node
+  - Delete node (confirm modal)
+
+G) StudyTodayScreen.tsx
+- Make it addictive:
+  - “Today’s Plan” (3–5 items)
+  - progress indicator
+  - quick start buttons (Study Cards / Take Quiz)
+- Show weakest topics first
+- Empty state with “Generate flashcards” CTA if none exist
+
+H) ExamModeScreen.tsx
+- Simple, clear setup:
+  - pick course/topic(s)
+  - pick exam date (if used)
+  - start practice quiz
+- Results summary: score + weak topics + next steps
+
+I) BillingScreen.tsx
+- Make paywall feel fair and convert:
+  - Clear plan comparison: FREE vs BASE vs PRO
+  - One primary recommended plan (highlight PRO yearly)
+  - Bullet benefits tied to outcomes (“Higher grades, less cramming”)
+  - CTA buttons large and clear
+- Add trust/FAQ:
+  - “Cancel anytime”
+  - “Your data is private”
+- Ensure styling matches premium theme
+
+J) HomeScreen.tsx
+- If this is a landing/entry screen, simplify:
+  - If logged in → route to Dashboard
+  - If logged out → route to Login
+- Add minimal welcome + value prop if needed
+
+K) LoginScreen.tsx
+- Clean, modern form
+- Proper validation messages
+- Loading + error states
+- No clutter
+
+L) ProfileScreen.tsx and SettingsScreen.tsx
+- Clean sectioned layout
+- Show current plan + manage subscription button
+- Add toggles for preferences (minimal)
+- Ensure consistent list rows
+
+M) ModalScreen.tsx
+- Ensure modals are consistent:
+  - title, body, buttons (primary/secondary)
+  - safe area, proper spacing
+
+5) QUALITY BAR
+- Consistent spacing and typography across all screens
+- Consistent icon style usage (use the existing icon solution)
+- Make the app feel like a paid premium student product
+- Ensure no screen looks “empty” or unfinished (use EmptyState)
+
+OUTPUT REQUIREMENTS
+- First output: UX audit list (top 10 issues + fixes)
+- Then implement changes and provide updated files organized by path:
+  client/constants/*
+  client/components/*
+  client/navigation/*
+  client/screens/*
+- Keep code compiling; avoid breaking navigation routes.
+
+Start now:
+1) Inspect the existing code.
+2) Output the UX audit.
+3) Implement navigation + design system upgrades.
+4) Refactor the key screens in this order:
+   Dashboard → Lecture → Record → Mindmap → Billing → StudyToday → Course/Semester → ExamMode → Settings/Profile/Login/Home
+Do not stop until the UI/flow is noticeably more premium and user-friendly.

@@ -1,0 +1,52 @@
+Audit and fix the backend routes for GET /api/semesters and GET /api/courses.
+
+Context:
+- This is a Node.js + Express + Prisma backend for a React Native / Expo app.
+- The server health route works:
+  GET /api/health -> 200 OK
+- But these routes fail:
+  GET /api/semesters -> {"error":"Failed to get semesters"}
+  GET /api/courses -> {"error":"Failed to get courses"}
+
+Known facts:
+- The correct backend base URL is:
+  https://asset-manager-landrys424.replit.app
+- The route file is likely server/study.ts
+- Auth middleware is guestOrAuthMiddleware
+- There is a helper getUserId(req) that should safely fall back to ANONYMOUS_USER_ID
+- The current failure is likely caused by Prisma query shape problems, such as:
+  - invalid nested include relations
+  - invalid orderBy fields like createdAt
+  - schema/query mismatch
+
+Tasks:
+1. Locate the GET /semesters and GET /courses handlers in server/study.ts.
+2. Check the Prisma schema for Semester and Course models.
+3. Fix the routes so they use safe minimal queries first:
+   - GET /semesters should use:
+     prisma.semester.findMany({
+       where: { userId: getUserId(req) }
+     })
+   - GET /courses should use:
+     prisma.course.findMany({
+       where: {
+         userId: getUserId(req),
+         ...(semesterId && { semesterId: semesterId as string })
+       }
+     })
+4. Remove nested include blocks if they are causing errors.
+5. Remove orderBy if the field does not exist in the Prisma schema.
+6. Preserve guestOrAuthMiddleware and existing response shapes:
+   - { semesters: [...] }
+   - { courses: [...] }
+7. Add detailed server-side error logging so the exact Prisma error is visible in logs:
+   res.status(500).json({ error: "Failed to get semesters", details: String(error) })
+   res.status(500).json({ error: "Failed to get courses", details: String(error) })
+
+After fixing:
+- restart the backend
+- verify:
+  GET /api/health returns 200
+  GET /api/semesters returns 200 with JSON array
+  GET /api/courses returns 200 with JSON array
+- show me the updated code for both routes

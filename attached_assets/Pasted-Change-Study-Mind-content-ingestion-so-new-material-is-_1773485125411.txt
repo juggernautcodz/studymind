@@ -1,0 +1,60 @@
+Change Study-Mind content ingestion so new material is organized by destination instead of always merging into the current topic.
+
+Problem:
+Right now adding content from Clipboard / Upload / Camera / Gallery / Record can merge into existing study materials.
+This is not good enough.
+
+Required behavior:
+When new content is added, the user must get a clear choice:
+
+1. Add to existing topic
+2. Create new topic
+3. Create new section/source group inside the current topic
+
+Goal:
+Do not silently merge content anymore.
+Make content organization explicit and user-controlled.
+
+What to implement:
+1. In the add-content flows (Clipboard, Upload, Camera, Gallery, Record), before saving/generated materials:
+   - show a destination picker/modal/sheet
+   - options:
+     a) Add to current topic
+     b) Create new topic
+     c) Save as separate section/source group in current topic
+
+2. If user chooses "Create new topic":
+   - create a new topic automatically
+   - use a sensible default title based on source type + timestamp
+     examples:
+     - Clipboard - Mar 14 3:20 PM
+     - Upload - filename
+     - Recording - Mar 14 3:20 PM
+
+3. If user chooses "Save as separate section/source group in current topic":
+   - keep the same topic
+   - save notes/cards/quiz under a distinct source label/group
+   - do not merge into previous sections silently
+
+4. If user chooses "Add to current topic":
+   - merge/append as currently implemented
+
+5. Update storage/UI so notes and materials show their source grouping clearly.
+
+Files to inspect first:
+- client/screens/CourseScreen.tsx
+- client/screens/RecordScreen.tsx
+- client/lib/storage.ts
+- any BottomSheet / modal components already used for topic selection
+
+Requirements:
+- Prefer reusing existing BottomSheet patterns
+- Keep the smallest safe UI change
+- Do not remove working upload/record flows
+- Make organization explicit and user-controlled
+
+Output:
+1. files changed
+2. destination flow added
+3. exact user choices shown
+4. final phone test flow

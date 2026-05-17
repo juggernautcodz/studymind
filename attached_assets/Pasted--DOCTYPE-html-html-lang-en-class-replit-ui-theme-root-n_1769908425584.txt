@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en" class="replit-ui-theme-root notranslate" translate="no" style="-webkit-app-region:drag">
+    <head>
+        <title data-next-head="">Loading... - Replit</title>
+        <link rel="shortcut icon" href="/public/icons/favicon-prompt-192.png" sizes="192x192" type="image/png" data-next-head=""/>
+        <meta property="og:title" content="Loading..." data-next-head=""/>
+        <meta property="og:description" content="Build and deploy software collaboratively with the power of AI without spending a second on setup." data-next-head=""/>
+        <meta property="og:type" content="article" data-next-head=""/>
+        <meta property="og:image" content="https://replit.com/public/images/opengraph.png" data-next-head=""/>
+        <meta property="og:site_name" content="replit" data-next-head=""/>
+        <meta property="fb:app_id" content="1775481339348651" data-next-head=""/>
+        <meta itemProp="name" content="replit" data-next-head=""/>
+        <meta itemProp="description" content="Build and deploy software collaboratively with the power of AI without spending a second on setup." data-next-head=""/>
+        <meta itemProp="image" content="https://replit.com/public/images/opengraph.png" data-next-head=""/>
+        <meta name="description" content="Build and deploy software collaboratively with the power of AI without spending a second on setup." data-next-head=""/>
+        <meta name="keywords" content="replit,ai,software,build,collaborate,IDE,platform,code,deploy,prototype,online,agent" data-next-head=""/>
+        <meta name="author" property="og:author" content="replit" data-next-head=""/>
+        <meta name="twitter:card" content="summary" data-next-head=""/>
+        <meta name="twitter:site" content="@replit" data-next-head=""/>
+        <meta name="twitter:title" content="Loading..." data-next-head=""/>
+        <meta name="twitter:description" content="Build and deploy software collaboratively with the power of AI without spending a second on setup." data-next-head=""/>
+        <meta name="twitter:image" content="https://replit.com/public/images/opengraph.png" data-next-head=""/>
+        <meta name="twitter:domain" content="replit.com" data-next-head=""/>
+        <meta name="google" content="notranslate" data-next-head=""/>
+        <meta name="viewport" content="width=device-width, initial-scale=1" data-next-head=""/>
+        <meta charSet="utf-8" data-next-head=""/>
+        <link rel="manifest" href="/public/manifest.json" data-next-head=""/>
+        <meta name="theme-color" content="#12141A" data-next-head=""/>
+        <meta http-equiv="origin-trial" content="AsKJNnBESA8LBSWSiA1TeHAuM7wj/zSm2MVlsxnG6yMeAuorNg9zyAEC3w+lp88yOz+9zkJmIQ++T1Cl4asHoAUAAABQeyJvcmlnaW4iOiJodHRwczovL3JlcGxpdC5jb206NDQzIiwiZmVhdHVyZSI6IkRpZ2l0YWxHb29kcyIsImV4cGlyeSI6MTYzMTY2Mzk5OX0=" data-next-head=""/>
+        <link rel="apple-touch-icon" href="/public/icons/favicon-prompt-192.png" data-next-head=""/>
+        <meta name="mobile-web-app-capable" content="yes" data-next-head=""/>
+        <meta name="apple-mobile-web-app-title" content="Replit" data-next-head=""/>
+        <link rel="search" type="application/opensearchdescription+xml" href="/public/opensearch.xml" title="Replit" data-next-head=""/>
+        <link rel="preload" href="/public/fonts/ibm-plex-sans-v8-latin-regular.woff2" as="font" type="font/woff2" crossorigin="anonymous" data-next-head=""/>
+        <link rel="preload" href="/public/fonts/ibm-plex-sans-v8-latin-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous" data-next-head=""/>
+        <link rel="preload" href="/public/fonts/ibm-plex-sans-v8-latin-500.woff2" as="font" type="font/woff2" crossorigin="anonymous" data-next-head=""/>
+        <link rel="preload" href="/public/fonts/ibm-plex-sans-v8-latin-500italic.woff2" as="font" type="font/woff2" crossorigin="anonymous" data-next-head=""/>
+        <link rel="preload" href="/public/fonts/ibm-plex-sans-v8-latin-600.woff2" as="font" type="font/woff2" crossorigin="anonymous" data-next-head=""/>
+        <link rel="preload" href="/public/fonts/ibm-plex-sans-v8-latin-600italic.woff2" as="font" type="font/woff2" crossorigin="anonymous" data-next-head=""/>
+        <style data-next-head="">
+            /* PLEX SANS */
+            /* ibm-plex-sans-regular - latin */
+            @font-face {
+                font-family: 'IBM Plex Sans';
+                font-style: normal;
+                font-weight: 400;
+                src: local('IBM Plex Sans Regular'), local('IBMPlexSans-Regular'), url('/public/fonts/ibm-plex-sans-v8-latin-regular.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */ url('/public/fonts/ibm-plex-sans-v8-latin-regular.woff') format('woff');
+                /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+            }
+
+            /* ibm-plex-sans-italic - latin */
+            @font-face {
+                font-family: 'IBM Plex Sans';
+                font-style: italic;
+                font-weight: 400;
+                src: local('IBM Plex Sans Italic'), local('IBMPlexSans-Italic'), url('/public/fonts/ibm-plex-sans-v8-latin-italic.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */ url('/public/fonts/ibm-plex-sans-v8-latin-italic.woff') format('woff');
+                /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+            }
+
+            /* ibm-plex-sans-500 - latin */
+            @font-face {
+                font-family: 'IBM Plex Sans';
+                font-style: normal;
+                font-weight: 500;
+                src: local('IBM Plex Sans Medium'), local('IBMPlexSans-Medium'), url('/public/fonts/ibm-plex-sans-v8-latin-500.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */ url('/public/fonts/ibm-plex-sans-v8-latin-500.woff') format('woff');
+                /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+            }
+
+            /* ibm-plex-sans-500italic - latin */
+            @font-face {
+                font-family: 'IBM Plex Sans';
+                font-style: italic;
+                font-weight: 500;
+                src: local('IBM Plex Sans Medium Italic'), local('IBMPlexSans-Medium-Italic'), url('/public/fonts/ibm-plex-sans-v8-latin-500italic.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */ url('/public/fonts/ibm-plex-sans-v8-latin-500italic.woff') format('woff');
+                /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+            }
+
+            /* ibm-plex-sans-600 - latin */
+            @font-face {
+                font-family: 'IBM Plex Sans';
+                font-style: normal;
+                font-weight: 600;
+                src: local('IBM Plex Sans Semibold'), local('IBMPlexSans-Semibold'), url('/public/fonts/ibm-plex-sans-v8-latin-600.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */ url('/public/fonts/ibm-plex-sans-v8-latin-600.woff') format('woff');
+                /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+            }
+
+            /* ibm-plex-sans-600italic - latin */
+            @font-face {
+                font-family: 'IBM Plex Sans';
+                font-style: italic;
+                font-weight: 600;
+                src: local('IBM Plex Sans Semibold Italic'), local('IBMPlexSans-Semibold-Italic'), url('/public/fonts/ibm-plex-sans-v8-latin-600italic.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */ url('/public/fonts/ibm-plex-sans-v8-latin-600italic.woff') format('woff');
+                /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+            }
+
+            /* ABC Diatype */
+            @font-face {
+                font-family: 'ABC Diatype';
+                font-weight: 100 1000;
+                src: local('ABC Diatype'), local('ABCDiatype'), url('/public/fonts/ABCDiatypePlusVariable-Regular.woff2') format('woff2')
+            }
+
+            /* ABC Diatype Variable */
+            @font-face {
+                font-family: 'ABC Diatype Variable';
+                font-weight: 100 1000;
+                src: local('ABC Diatype Variable'), local('ABCDiatypeVariable'), url('/public/fonts/ABCDiatype-RegularPixelBeta.woff2') format('woff2')
+            }
+
+            /* ABC Diatype Pixel */
+            @font-face {
+                font-family: 'ABC Diatype Pixel';
+                font-style: normal;
+                font-weight: 400;
+                font-feature-settings: '"ss15"';
+                src: local('ABC Diatype Pixel'), local('ABCDiatypePixel'), url('/public/fonts/ABCDiatype-RegularPixelBeta.woff') format('woff'), url('/public/fonts/ABCDiatype-RegularPixelBeta.woff2') format('woff2')
+            }
+        </style>
+        <style data-next-head="">
+            @font-face {
+                font-family: 'ReplitHack';
+                src: url('/public/fonts/hack-regular.woff2?sha=3114f1256') format('woff2'), url('/public/fonts/hack-regular.woff?sha=3114f1256') format('woff');
+                font-weight: 400;
+                font-style: normal;
+            }
+
+            @font-face {
+                font-family: 'ReplitHack';
+                src: url('/public/fonts/hack-bold.woff2?sha=3114f1256') format('woff2'), url('/public/fonts/hack-bold.woff?sha=3114f1256') format('woff');
+                font-weight: 700;
+                font-style: normal;
+            }
+
+            @font-face {
+                font-family: 'ReplitHack';
+                src: url('/public/fonts/hack-italic.woff2?sha=3114f1256') format('woff2'), url('/public/fonts/hack-italic.woff?sha=3114f1256') format('woff');
+                font-weight: 400;
+                font-style: italic;
+            }
+
+            @font-face {
+                font-family: 'ReplitHack';
+                src: url('/public/fonts/hack-bolditalic.woff2?sha=3114f1256') format('woff2'), url('/public/fonts/hack-bolditalic.woff?sha=3114f1256') format('woff');
+                font-weight: 700;
+                font-style: italic;
+            }
+        </style>
+        <script>
+            window.preloadErrorHandler = function(event) {
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'https://http-intake.logs.us5.datadoghq.com/api/v2/logs?dd-api-key=pub31a5047a3a4692afb84a423db984dc57', true);
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.setRequestHeader('Content-Type', 'application/json');
+
+                xhr.send(JSON.stringify({
+                    ddsource: 'browser',
+                    ddtags: 'env:production,version:9ccd0d04',
+                    message: 'Browser preload error',
+                    preloadError: {
+                        errorMessage: event.message,
+                        errorFile: event.filename,
+                        errorLine: event.lineno,
+                        errorColumn: event.colno,
+                        errorStackOrType: event.error ? event.error.stack : '',
+                        errorJSType: typeof event.error
+                    },
+                    service: 'website',
+                    http: {
+                        useragent: window.navigator.userAgent
+                    },
+                    view: {
+                        url: window.location.href,
+                        referrer: window.document.referrer
+                    }
+                }));
+            }
+            ;
+            window.addEventListener('error', window.preloadErrorHandler);
+        </script>
+        <link rel="dns-prefetch" href="http://sp.replit.com"/>
+        <script type="text/javascript">
+            /* Polyfill service v4.7.0
+ * Disable minification (remove `.min` from URL path) for more info */
+        </script>
+        <script type="text/javascript">
+            (function() {
+                AbortSignal.any || (AbortSignal.any = function(n) {
+                    const e = new AbortController;
+                    for (const o of n) {
+                        if ("object" != typeof o || null === o || !("aborted"in o && "reason"in o && "onabort"in o && "addEventListener"in o))
+                            throw new TypeError("Expected all values to implement AbortSignal interface");
+                        if (o.aborted) {
+                            e.abort(o.reason);
+                            break
+                        }
+                        o.addEventListener("abort", ( () => {
+                            e.abort(o.reason)
+                        }
+                        ), {
+                            signal: e.signal
+                        })
+                    }
+                    return e.signal
+                }
+                );
+            }
+            )()
+        </script>
+        <script type="text/javascript">
+            CLIENT_IP = JSON.parse(atob('IjI2MDU6NTljYToxMDNmOjk2MTA6ZDA1Njo1MTQ2OjcyMWU6MWM2YiI='))
+        </script>
+        <script type="text/javascript">
+            __PUBLIC_ENV__ = JSON.parse(atob('eyJORVhUX1BVQkxJQ19TVFJJUEVfUFVCTElDX0tFWSI6InBrX2xpdmVfNTE1WXBOc0pBbW5ZVk92Zm5zQnFSZEFUV1M2U3piTkFzbE96MXoydHVqZEt1dlJNREF3V01lRlhwNmRKTDFZS1JyUWpCMFdBcDBVREd3bEZZTDdoeHc3RmMwMFFrZnhCRnNMIiwiTkVYVF9QVUJMSUNfRklSRUJBU0VfQVBJX0tFWSI6IkFJemFTeUFSQXpWVFdjX0tPQm9qSWhvbExvMnd6d05PUTZWS2NCOCIsIk5FWFRfUFVCTElDX0ZJUkVCQVNFX1BST0pFQ1RfSUQiOiJyZXBsaXQtd2ViIiwiTkVYVF9QVUJMSUNfRklSRUJBU0VfQVBQX0lEIjoiMToxNzI2NjAzOTY5MTc6d2ViOjU0MTk5N2JiZmJjM2Y2YTdhNDM5M2MiLCJORVhUX1BVQkxJQ19MQVVOQ0hfREFSS0xZX0NMSUVOVF9JRCI6IjYyYjM1YTg2NTE1MmFiMTRjNTk0MjgyMCIsIk5FWFRfUFVCTElDX1NFR01FTlRfS0VZX0NMSUVOVCI6ImRNZVBLR0M0QnFmQml2cGUwSHZsOElvUHB6U0hnamRYIiwiTkVYVF9QVUJMSUNfU1RBVFNJR19DTElFTlRfQVBJX0tFWSI6ImNsaWVudC1CcDdtN3BOQjZIMGZuU0dqVnR4TjVCZVdRdzRCU0FhdDRPRnNYYTNWY1RGIiwiTkVYVF9QVUJMSUNfQVBQU0ZMWUVSX1dFQl9ERVZfS0VZIjoiZTU1MjRhYzYtN2RkMS00YjFhLWI0M2YtZmQyYTMyMzYwMGI1IiwiTkVYVF9QVUJMSUNfU0FOSVRZX1BST0pFQ1RfSUQiOiJiajM0cGRicCIsIk5FWFRfUFVCTElDX1NBTklUWV9EQVRBU0VUIjoibWlncmF0aW9uIn0='))
+        </script>
+        <script>
+            !function() {
+                var analytics = window.analytics = window.analytics || [];
+                if (!analytics.initialize)
+                    if (analytics.invoked)
+                        window.console && console.error && console.error("Segment snippet included twice.");
+                    else {
+                        analytics.invoked = !0;
+                        analytics.methods = ["trackSubmit", "trackClick", "trackLink", "trackForm", "pageview", "identify", "reset", "group", "track", "ready", "alias", "debug", "page", "once", "off", "on"];
+                        analytics.factory = function(e) {
+                            return function() {
+                                var t = Array.prototype.slice.call(arguments);
+                                t.unshift(e);
+                                analytics.push(t);
+                                return analytics
+                            }
+                        }
+                        ;
+                        for (var e = 0; e < analytics.methods.length; e++) {
+                            var key = analytics.methods[e];
+                            analytics[key] = analytics.factory(key)
+                        }
+                        analytics.load = function(key, e) {
+                            var t = document.createElement("script");
+                            t.type = "text/javascript";
+                            t.defer = !0;
+                            t.src = "https://sp.replit.com/sdk.js/v1/" + key + "/sdk.min.js";
+                            var n = document.getElementsByTagName("script")[0];
+                            n.parentNode.insertBefore(t, n);
+                            analytics._loadOptions = e
+                        }
+                        ;
+                        analytics.SNIPPET_VERSION = "4.15.3";
+                        analytics.load('dMePKGC4BqfBivpe0Hvl8IoPpzSHgjdX', {
+                            integrations: {
+                                'Segment.io': {
+                                    apiHost: 'sp.replit.com/v1'
+                                }
+                            }
+                        });
+                    }
+            }();
+        </script>
+        <link data-next-font="size-adjust" rel="preconnect" href="/" crossorigin="anonymous"/>
+        <script id="coframe-setup" data-nscript="beforeInteractive" crossorigin="anonymous">
+            (function() {
+                // Early exit for performance testing
+                if (/cf_disable/.test(window.location.search))
+                    return console.warn('[Coframe] Disabled via URL parameter');
+
+                // For pricing we want to use antiflicker, since we want to apply changes on that page.
+                // If the page is not /pricing, we use Coframe for tracking only.
+                const useFullSetup = /^\/pricing(?:\/|$)?/.test(window.location.pathname);
+
+                var config = {
+                    projectId: '68c9ad4d4cddb58cf3a1f93d',
+                    startTime: Date.now(),
+                    timeoutMs: 1000,
+                    currentUrl: window.location.href
+                };
+
+                if (useFullSetup) {
+                    config.waitForHydration = true;
+                } else {
+                    config.trackingOnly = true;
+                }
+
+                // Coframe queue setup
+                (window.CFQ = window.CFQ || []).push({
+                    config
+                });
+
+                // Prevent duplicate installation
+                const script_id = 'coframe-sdk-js';
+                if (document.getElementById(script_id))
+                    return console.warn('[Coframe] SDK already installed');
+
+                // Coframe antiflicker CSS
+                if (useFullSetup) {
+                    const edgeUrl = new URL('https://edge.cofra.me/cf.css');
+                    edgeUrl.searchParams.set('config', encodeURIComponent(JSON.stringify(config)));
+
+                    const style = document.createElement('link');
+                    style.rel = 'stylesheet';
+                    style.href = edgeUrl.toString();
+                    function hide() {
+                        document.head.appendChild(style);
+                    }
+                    function show() {
+                        style.remove();
+                    }
+                    hide();
+                    setTimeout(show, config.timeoutMs);
+                }
+
+                // Coframe SDK JS
+                const edgeUrl = new URL('https://edge.cofra.me/cf.js');
+                edgeUrl.searchParams.set('config', encodeURIComponent(JSON.stringify(config)));
+                const script = document.createElement('script');
+                script.id = script_id;
+                script.async = true;
+                script.src = edgeUrl.toString();
+                script.onerror = () => {
+                    if (useFullSetup)
+                        show();
+                    console.error('[Coframe] SDK failed to load');
+                }
+                ;
+                document.head.appendChild(script);
+            }
+            )();
+        </script>
+        <link rel="preload" href="https://cdn.replit.com/_next/static/chunks/0ec701c2e0eeb130.css" as="style" crossorigin="anonymous"/>
+        <link rel="stylesheet" href="https://cdn.replit.com/_next/static/chunks/0ec701c2e0eeb130.css" crossorigin="anonymous" data-n-g=""/>
+        <link rel="preload" href="https://cdn.replit.com/_next/static/chunks/de9e6d92c24d91b3.css" as="style" crossorigin="anonymous"/>
+        <link rel="stylesheet" href="https://cdn.replit.com/_next/static/chunks/de9e6d92c24d91b3.css" crossorigin="anonymous" data-n-g=""/>
+        <link rel="preload" href="https://cdn.replit.com/_next/static/chunks/32fbc46ce026ab38.css" as="style" crossorigin="anonymous"/>
+        <link rel="stylesheet" href="https://cdn.replit.com/_next/static/chunks/32fbc46ce026ab38.css" crossorigin="anonymous" data-n-g=""/>
+        <link rel="preload" href="https://cdn.replit.com/_next/static/chunks/2e4368d789bfa587.css" as="style" crossorigin="anonymous"/>
+        <link rel="stylesheet" href="https://cdn.replit.com/_next/static/chunks/2e4368d789bfa587.css" crossorigin="anonymous" data-n-g=""/>
+        <link rel="preload" href="https://cdn.replit.com/_next/static/chunks/101f2138e149e2b2.css" as="style" crossorigin="anonymous"/>
+        <link rel="stylesheet" href="https://cdn.replit.com/_next/static/chunks/101f2138e149e2b2.css" crossorigin="anonymous" data-n-g=""/>
+        <link rel="preload" href="https://cdn.replit.com/_next/static/chunks/b741793a793b5ac4.css" as="style" crossorigin="anonymous"/>
+        <link rel="stylesheet" href="https://cdn.replit.com/_next/static/chunks/b741793a793b5ac4.css" crossorigin="anonymous" data-n-p=""/>
+        <link rel="preload" href="https://cdn.replit.com/_next/static/chunks/1936a62e998b2c3c.css" as="style" crossorigin="anonymous"/>
+        <link rel="stylesheet" href="https://cdn.replit.com/_next/static/chunks/1936a62e998b2c3c.css" crossorigin="anonymous" data-n-p=""/>
+        <link rel="preload" href="https://cdn.replit.com/_next/static/chunks/7c6c30bc377cc7d5.css" as="style" crossorigin="anonymous"/>
+        <link rel="stylesheet" href="https://cdn.replit.com/_next/static/chunks/7c6c30bc377cc7d5.css" crossorigin="anonymous" data-n-p=""/>
+        <noscript data-n-css=""></noscript>
+        <script src="https://cdn.replit.com/_next/static/chunks/88eb1209ce489e41.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/b08fe1ee4e10d877.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/1cc5336bc97822a9.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/e7b874030ff9150d.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/7541a3aaa165c9c4.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/67fb20080bad9b7e.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/dd8984761d6fbe3e.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/f01f06ba738d3667.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/41b810b29308b5d8.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/baf8753f9560856f.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/218d19c252a3e6f4.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/dec61f11150980d1.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/8271b924a026ed97.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/0fb71168f07dae81.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/02500acb87eea448.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/f5912e4e02257831.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/220917b06f272552.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/ff456b7c9827371a.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/9a2446c69ceea6f9.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/e925166fc1c6928c.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/ba697728dee94038.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/5c25864d130ea955.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/2bea93081e31c286.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/2f1719f48a11f190.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/633a9e0633c527be.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/1ea852b39e732431.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/636ecef72420c0b7.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/5b0f197273230583.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/8c7cf3ab3048b662.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/turbopack-9423ab3bbb2c7672.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/a054bd5533477e00.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/d7c7db9b0257ef09.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/fec454bb48704ee3.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/13e59e556f1b7d33.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/c37077a66d4bcf8d.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/acbbc4efb489510a.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/12de380462871dc6.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/3062130978728822.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/6403836bce242707.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/d80fc75e71eb82b0.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/1b74e0cef0a5100c.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/f2824b9840cfcaba.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/500fc1f92b6b65db.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/076d69066004e48c.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/9031bc1ae73b82b2.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/9fad842a620b6156.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/30aeefacda6d8dbe.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/edbdbd292c81b37d.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/930948448f0f71bd.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/635a07b667e2b718.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/1067c710e1bf605b.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/af6fa3b3dc7cbfb3.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/042b1d6b5e12c776.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/162f357dd2f8ea35.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/662a1f135391b3d0.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/f5fb73d4f69cac67.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/c4b6f6a5b7c44929.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/d9a0446971098128.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/4c87a952e83b1531.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/58cd931218742774.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/fd495a83f4ce7f15.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/28649dab4dd2afc0.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/3bf8127ff439c331.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/e17bd2f3c41ed66d.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/f39f524cca159cb3.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/fc31142ebaf33649.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/545373c798b95b3c.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/bb2b16d38e37ec1e.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/ded322945bcd4af1.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/9daff17633852a15.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/d98016be4dad669e.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/28cb8bd117d0a713.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/423b44954218047e.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/85879933359da3e1.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/44df6babcf2fec46.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/67939cc7ef2cff49.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/e59cd40e5294cb1c.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/986a9d2257c0bd39.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/4a9ddc36806ca1e5.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/d1a2036a45549e88.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/f631661e7a86149d.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/af2d4dc8181a094f.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/3ab4e0a6dc2a70aa.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/aac1f9304cdb6fc8.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/d089ef2e348aa47b.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/e27eca0f3d19fa24.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/a99b831b3172cabe.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/e7086005e1ac5d2a.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/2879de5187570a94.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/67483a7e2b2224d3.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/4dd6d416b55c667b.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/a2bce036cc83e667.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/459997ab0e61eb91.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/aadb2a44b5a503f9.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/126c0e68fb6b09a9.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/543611925b113565.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/ff9599dbf897a616.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/d185cf25c5d217b9.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/6bc0cce1734c9c18.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/ee1f13eb050bd549.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/405374f7ffe8fc6a.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/be71d71ea694ce70.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/849f406428a9e813.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/7e60d85bb753c3a2.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/3d3f6ee0664d8076.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/81478579e4bf10e4.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/04792b8c2c901ccb.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/a970679d68b96551.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/1f88838449307f11.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/179b74801865ccf9.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/fa4370e3425b315a.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/1c9b0e5cd3abe214.js" defer="" crossorigin="anonymous"></script>
+        <script src="https://cdn.replit.com/_next/static/chunks/df7c2f8d8104fa6e.js" defer="" crossorigin="anonymous"></script>

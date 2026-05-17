@@ -1,0 +1,42 @@
+Implement REAL Android purchase validation for Google Play Billing.
+
+Right now server/billing/androidPurchaseValidator.ts always returns:
+{ valid: false, error: "Production validation not configured" }
+because the production code is commented out.
+
+Goal:
+- In production, verify purchaseToken + productId using Google Play Developer API.
+- Return { valid: true, ... } only if Google confirms the purchase is valid and not canceled/refunded.
+- Keep TEST_TOKEN shortcut ONLY when NODE_ENV !== "production".
+
+Requirements:
+1) Add dependency: googleapis (and any needed auth libs).
+2) Add env var support (Deployment Secrets):
+   - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON (full JSON string, not a file)
+   - GOOGLE_PLAY_PACKAGE_NAME (e.g. com.studymind.app)
+3) Use service account JWT auth to call:
+   androidpublisher.purchases.subscriptionsv2.get (preferred) OR
+   androidpublisher.purchases.products.get for one-time products,
+   depending on productId type.
+4) Decide product type:
+   - If productId includes ".monthly" or ".yearly" treat as subscription
+   - If productId includes ".base" treat as one-time product
+   (or implement a map / explicit switch for product IDs)
+5) Parse Google response:
+   - If purchaseState indicates purchased and not revoked/refunded → valid
+   - Extract expiry time for subs (if subscription)
+6) Update /api/billing/verify to store:
+   - purchaseTokenOrTransactionId = purchaseToken
+   - verifiedAt
+   - expiresAt for subscriptions (or null for one-time)
+   - plan = BASE or PRO based on productId
+7) Add a clear 400 error when env vars are missing:
+   { error: "Billing not configured", code: "BILLING_NOT_CONFIGURED" }
+8) Return which files changed, and give curl test commands for:
+   - missing env vars (expect 400)
+   - invalid token (expect 400)
+   - valid token (expect 200) (note: can only be tested with a real token)
+
+Also:
+- Remove any Stripe initialization from server startup so deployments don’t fail if Stripe env vars are missing.
+- Confirm server boots even if Stripe env vars are absent.

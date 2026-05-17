@@ -1,0 +1,202 @@
+You are a senior full-stack engineer building a production-ready MVP in a Replit workspace.
+
+GOAL
+Build a PAID student study app (web-first, mobile-friendly) where students can:
+1) Record lectures (audio) in the browser
+2) Upload recording → get AI transcription
+3) Convert transcript → structured notes
+4) Generate study materials: flashcards + quizzes
+5) Organize everything inside a Mind-Map UI (like Mindly)
+6) Capture whiteboard/slides via image upload (camera-friendly) → OCR → attach to notes
+7) Organize by Semester → Course → Topic → Lecture
+8) Add auth + payment gating (Stripe-ready), with usage limits for AI minutes/storage (basic counters)
+
+IMPORTANT CONSTRAINTS (Replit)
+- Build as a monorepo:
+  - Frontend: React + TypeScript + Vite
+  - Backend: Node.js + TypeScript + Express
+  - DB: SQLite using Prisma (easy on Replit) OR Postgres if available (choose SQLite for MVP)
+  - File storage: local filesystem (uploads/) for MVP with a clean adapter for S3/GCS later
+- AI services: implement as “providers” with stubs:
+  - TranscriptionProvider
+  - NotesProvider
+  - FlashcardsProvider
+  - QuizProvider
+  - OcrProvider
+  Provide a simple “mock mode” (fake outputs) so the app works end-to-end without external keys.
+  Include config placeholders for real integrations later (OpenAI, Google, etc.), but do NOT require them to run.
+
+DELIVERABLE
+Generate the full codebase with:
+- Working UI flows
+- Working backend APIs
+- Database schema + migrations
+- End-to-end demo using mock AI outputs
+- Clear “how to run” instructions at the end
+
+FEATURES (MVP)
+A) Authentication
+- Email+password signup/login with JWT sessions
+- Basic user profile
+- Middleware: requireAuth
+
+B) Data model / organization
+- Semester
+- Course (belongs to Semester)
+- Topic (belongs to Course)
+- Lecture (belongs to Topic)
+- Recording (belongs to Lecture)
+- Transcript (belongs to Recording)
+- Notes (belongs to Lecture)
+- Flashcards (belongs to Lecture)
+- Quizzes + QuizQuestions (belongs to Lecture)
+- WhiteboardImage (belongs to Lecture) with OCR text
+
+C) Mind-map
+- Store mindmap nodes in DB:
+  mindmap_nodes: id, userId, courseId, parentId, nodeType ('course','topic','lecture','concept'), title, depth, orderIndex, createdAt, updatedAt
+- Link content to nodes via join tables:
+  node_notes, node_flashcards, node_quizzes, node_whiteboard_images
+- API returns:
+  nodes[] and content counts per node (notesCount, flashcardsCount, quizzesCount, imagesCount)
+
+D) Lecture recording & upload
+- Frontend uses MediaRecorder API
+- Record → stop → upload to backend
+- Backend stores file and creates Recording record
+- Trigger a transcription job (mocked)
+- Show job status UI (“Processing…”)
+- Once transcript ready: generate notes + flashcards + quiz + mindmap suggestions (all mocked in MVP)
+
+E) Notes + study materials
+- Notes view: structured notes display (headings + bullets)
+- Flashcards view: simple “flip card” UI + next/prev
+- Quiz view: multiple choice MVP
+
+F) Whiteboard capture
+- Upload image (camera-friendly)
+- Backend stores image
+- OCR provider returns extracted text (mock)
+- Attach to lecture + optionally generate note snippet
+
+G) Paid access / gating (Stripe-ready)
+- Create a “plan” system:
+  plan = 'FREE' | 'BASE' | 'PRO'
+- MVP: BASE and PRO gates:
+  - FREE: limited (e.g., 2 recordings total)
+  - BASE: more (e.g., 20 recordings/mo)
+  - PRO: more (e.g., 200 recordings/mo)
+- Implement usage counters:
+  transcriptionMinutesUsed, storageBytesUsed, recordingsCountThisMonth
+- Add endpoints and frontend stubs for Stripe checkout:
+  POST /billing/create-checkout-session (stub)
+  POST /billing/webhook (stub)
+- In UI: show “Upgrade” button + pricing page.
+- Do not require Stripe keys to run; if no keys, keep billing in demo mode.
+
+UI PAGES (React Router)
+- /login
+- /dashboard (semesters + courses)
+- /courses/:courseId (topics + lectures)
+- /mindmap/:courseId (mindmap view)
+- /lectures/:lectureId/record (record + upload + status)
+- /lectures/:lectureId/notes
+- /lectures/:lectureId/flashcards
+- /lectures/:lectureId/quiz
+- /lectures/:lectureId/whiteboard (upload + OCR)
+
+MIND-MAP UI (MVP)
+- Render nodes as a simple interactive tree/graph:
+  - left panel: tree list with indentation (fast MVP)
+  - main panel: optional graph layout using a lightweight library OR simple SVG lines
+- Clicking a node opens a detail drawer showing:
+  - linked notes excerpts
+  - flashcards count
+  - quiz count
+  - whiteboard images
+- Provide actions:
+  - Add child node
+  - Rename node
+  - Reorder node (up/down)
+  - Delete node
+
+API ENDPOINTS (Express)
+Auth:
+- POST /api/auth/signup
+- POST /api/auth/login
+- GET  /api/auth/me
+
+Structure CRUD:
+- GET/POST /api/semesters
+- GET/PUT/DELETE /api/semesters/:id
+- GET/POST /api/courses (filtered by semester)
+- GET/PUT/DELETE /api/courses/:id
+- GET/POST /api/topics (filtered by course)
+- GET/PUT/DELETE /api/topics/:id
+- GET/POST /api/lectures (filtered by topic)
+- GET/PUT/DELETE /api/lectures/:id
+
+Recording + AI jobs:
+- POST /api/recordings/upload (multipart)
+- POST /api/transcription/request (recordingId)
+- GET  /api/jobs/:jobId (status)
+- GET  /api/lectures/:lectureId/transcript
+- POST /api/lectures/:lectureId/notes/generate
+- GET  /api/lectures/:lectureId/notes
+- POST /api/lectures/:lectureId/flashcards/generate
+- GET  /api/lectures/:lectureId/flashcards
+- POST /api/lectures/:lectureId/quizzes/generate
+- GET  /api/lectures/:lectureId/quizzes
+
+Mindmap:
+- GET  /api/mindmap/:courseId
+- POST /api/mindmap/:courseId/nodes
+- PUT  /api/mindmap/nodes/:nodeId
+- DELETE /api/mindmap/nodes/:nodeId
+- POST /api/mindmap/:courseId/auto-generate (from notes; mocked)
+
+Whiteboard:
+- POST /api/whiteboard/upload (multipart, lectureId)
+- GET  /api/lectures/:lectureId/whiteboards
+
+PROJECT STRUCTURE (Monorepo)
+- /apps/web (Vite React TS)
+- /apps/api (Node TS Express)
+- /packages/shared (shared types + zod schemas)
+- /prisma (schema + migrations)
+- root package.json with concurrent dev scripts
+
+IMPLEMENTATION DETAILS
+- Use Zod for request validation
+- Use Prisma for DB access
+- Use Multer for uploads
+- Use JWT auth
+- Use CORS and dotenv
+- Provide a Job table for async-ish jobs:
+  jobs: id, userId, type, status, inputJson, outputJson, error, createdAt, updatedAt
+  Types: TRANSCRIBE, NOTES, FLASHCARDS, QUIZ, OCR, MINDMAP
+- In MVP, jobs can run “synchronously” but still store status transitions for realism.
+
+MOCK AI OUTPUTS (Important)
+Implement provider stubs that produce believable outputs:
+- Transcription: return a paragraph and timestamps
+- Notes: return structured JSON {title, sections:[{heading, bullets[]}]}
+- Flashcards: return 10 Q/A pairs
+- Quiz: return 5 MC questions with options + correct answer
+- OCR: return extracted text with cleaned formatting
+- Mindmap auto: create topic nodes from section headings, lecture node, concept nodes from key terms
+
+WHAT YOU MUST OUTPUT
+1) All code files
+2) The Prisma schema
+3) Setup instructions (install, migrate, run)
+4) A demo flow:
+   - Create semester/course/topic/lecture
+   - Record/upload OR upload a sample audio file
+   - Run mock transcription → notes → flashcards → quiz → mindmap
+   - Upload a whiteboard image → OCR → attach
+
+Start by:
+- Proposing the exact stack choices (React/Vite + Express/Prisma/SQLite)
+- Then generate the repository structure and code.
+- Ensure it runs in Replit with a single “npm run dev” from root.

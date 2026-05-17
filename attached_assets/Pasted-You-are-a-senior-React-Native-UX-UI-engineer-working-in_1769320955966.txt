@@ -1,0 +1,77 @@
+You are a senior React Native UX/UI engineer working in this repository.
+
+This is a React Native app using StyleSheet.create() and theme tokens from:
+- client/constants/theme.ts
+
+Do NOT introduce CSS/Tailwind/MUI or replace the architecture.
+Improve and reuse the existing component system in:
+- client/components/ (Button, Card, Badge, EmptyState, Toast, ListItem, ProcessingTimeline, StatusChip, SectionHeader, etc.)
+
+Repo layout:
+client/
+  components/
+  constants/
+  contexts/
+  hooks/
+  lib/
+  navigation/
+  screens/
+  types/
+
+Screens to improve (exact files):
+- client/screens/DashboardScreen.tsx
+- client/screens/SemesterScreen.tsx
+- client/screens/CourseScreen.tsx
+- client/screens/LectureScreen.tsx
+- client/screens/RecordScreen.tsx
+- client/screens/MindmapScreen.tsx
+- client/screens/StudyTodayScreen.tsx
+- client/screens/ExamModeScreen.tsx
+- client/screens/BillingScreen.tsx
+- client/screens/LoginScreen.tsx
+- client/screens/HomeScreen.tsx
+- client/screens/ProfileScreen.tsx
+- client/screens/SettingsScreen.tsx
+- client/screens/ModalScreen.tsx
+
+Navigation files:
+- client/navigation/RootStackNavigator.tsx
+- client/navigation/MainTabNavigator.tsx
+- client/navigation/HomeStackNavigator.tsx
+- client/navigation/ProfileStackNavigator.tsx
+
+Goal:
+Make the app look premium, flow better, and be extremely user-friendly for students.
+Do not add major new features. Focus on UX clarity, polish, and reducing friction.
+
+Hard constraints:
+- StyleSheet.create only
+- Use theme tokens (Spacing, Typography, Colors, BorderRadius)
+- Use existing components (improve them if needed)
+- Add consistent empty/loading/error states + success/error toasts everywhere
+- Ensure tap targets are large (44px+) and typography hierarchy is obvious
+
+Tasks (do in this order):
+1) UX audit: list top 10 friction points + where they occur + fix plan (short).
+2) Navigation clarity:
+   - Ensure MainTabNavigator provides obvious primary sections (Dashboard/Home, Record, Mind Map, Study, Profile/Settings).
+   - Ensure stack navigation feels consistent (headers, back behavior, titles).
+   - Remove/avoid duplicate/unused navigator files if safe (e.g., MainTabNavigator26.tsx).
+3) Design system consistency:
+   - Review and improve client/components/Button.tsx, Card.tsx, Input.tsx, ListItem.tsx, SectionHeader.tsx, StatusChip.tsx, Toast.tsx, EmptyState.tsx.
+   - Ensure variants + consistent padding/spacing/typography.
+4) Screen refactors (apply design system and improve flow):
+   - DashboardScreen: add “Next Best Action” card at top + quick tiles (Record, Study Today, Mind Map, Exam Mode).
+   - SemesterScreen/CourseScreen: clearer hierarchy + empty states + strong primary CTAs.
+   - LectureScreen: make it a “hub” with ProcessingTimeline + big CTAs (Record/Upload, Generate, Study).
+   - RecordScreen: premium recording UI (timer, states, confirmation toast).
+   - MindmapScreen: add node detail drawer/bottom sheet, counts via StatusChip/Badge, clear add/rename/delete actions.
+   - StudyTodayScreen: make it addictive (Today’s plan, progress, quick start).
+   - ExamModeScreen: clean setup + results summary + next step CTA.
+   - BillingScreen: premium paywall with plan comparison, one highlighted plan, clear benefits, restore purchases/manage plan button.
+   - Login/Home/Profile/Settings/Modal: simplify and polish; consistent spacing and layout.
+
+Output requirements:
+- After the audit, implement the changes.
+- Provide updated files grouped by folder path.
+- Ensure the app still compiles and navigation routes still work.

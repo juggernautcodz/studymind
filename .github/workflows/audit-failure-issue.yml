@@ -1,0 +1,63 @@
+name: Open Issue on Audit Failure
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit_and_issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run full audit (capture output)
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run audit 2>&1 | tee audit.log
+
+      - name: Create Issue if audit failed
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const log = fs.readFileSync("audit.log", "utf8").slice(-60000);
+            const title = `🚨 Audit failed: ${new Date().toISOString()}`;
+            const body = [
+              "Scheduled audit failed.",
+              "",
+              "### Tail of audit.log",
+              "```",
+              log,
+              "```",
+              "",
+              "Assign Copilot Agent to this issue to propose a fix via PR."
+            ].join("\n");
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ["audit-failure"]
+            });

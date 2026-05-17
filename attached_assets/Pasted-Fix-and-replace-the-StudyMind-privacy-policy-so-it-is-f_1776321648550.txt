@@ -1,0 +1,51 @@
+Fix and replace the StudyMind privacy policy so it is fully accurate, compliant with Google Play requirements, and matches the current app behavior.
+
+Context:
+The current privacy policy is outdated and incorrect. It incorrectly claims:
+- Email/password accounts are required
+- Data is stored on servers
+- Cross-device sync exists
+- Usage analytics are collected
+
+These are NOT true anymore.
+
+Actual app behavior:
+- App supports guest mode (no login required)
+- Most data is stored locally on the device
+- Server is ONLY used temporarily for AI processing (transcription, OCR, generation)
+- No cross-device sync exists
+- No analytics or usage tracking SDK is used
+- Notifications are local only and optional
+- Payments are handled by Google Play (no payment data stored by the app)
+
+Data collected:
+- Audio recordings (processed, not permanently stored)
+- Images (processed for OCR)
+- Text input (clipboard, uploads, typed)
+- Study content (notes, flashcards, quizzes)
+
+Deletion behavior:
+- Clear All Data → deletes local device data only
+- Delete My Data → deletes server + device data
+- Delete Account → deletes everything (account + server + device)
+
+Requirements:
+1. Write a clean, professional, production-ready privacy policy
+2. Use simple, clear language (no legal overkill)
+3. Clearly explain:
+   - What data is collected
+   - Where it is stored (local vs server)
+   - How it is used
+   - Third-party services (OpenAI, Google Play billing)
+   - Notifications (local only)
+   - Data deletion options
+4. Remove all incorrect claims (no analytics, no sync, no mandatory account)
+5. Use correct terminology: "topics", "notes", "recordings" (not lectures inconsistently)
+6. Include correct contact email:
+   studymindv1@hotmail.com
+7. Ensure it is safe for Google Play review (no misleading statements)
+
+Output:
+- Full privacy policy HTML content for server/templates/privacy-policy.html
+- Clean formatting with headings and sections
+- Ready to deploy without further edits
