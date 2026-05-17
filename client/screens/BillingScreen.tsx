@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import Constants from "expo-constants";
 import {
   View,
   StyleSheet,
@@ -74,6 +75,9 @@ const BENEFITS = [
 const SUBSCRIPTION_SKUS = ["com.studymind.pro.monthly", "com.studymind.pro.yearly"];
 const PRODUCT_SKUS = ["com.studymind.base.lifetime"];
 
+// True when running inside Expo Go — IAP native module is not available there.
+const IS_EXPO_GO = Constants.appOwnership === "expo";
+
 export default function BillingScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -87,6 +91,7 @@ export default function BillingScreen() {
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
   const [showRestoreSheet, setShowRestoreSheet] = useState(false);
+  const [billingAvailable, setBillingAvailable] = useState(true);
   const gpPricesRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
@@ -95,12 +100,41 @@ export default function BillingScreen() {
   }, []);
 
   useEffect(() => {
+    // Expo Go does not ship the native IAP module — skip all IAP init to
+    // prevent an E_IAP_NOT_AVAILABLE crash. The friendly fallback UI renders
+    // instead. Production / dev-client builds run the full flow below.
+    if (IS_EXPO_GO) {
+      setBillingAvailable(false);
+      return;
+    }
+
     let purchaseListener: { remove: () => void } | null = null;
     let errorListener: { remove: () => void } | null = null;
 
     const init = async () => {
       try {
         await initConnection();
+
+        // Only register listeners after a successful connection.
+        purchaseListener = purchaseUpdatedListener(async (purchase: Purchase) => {
+          const purchased =
+            purchase.purchaseState === 'purchased' ||
+            purchase.purchaseState == null;
+          if (!purchased) return;
+          await processPurchase(purchase);
+        });
+
+        errorListener = purchaseErrorListener((error: any) => {
+          if (error.code !== "E_USER_CANCELLED") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            showToast({
+              type: "error",
+              title: "Purchase Failed",
+              message: error.message || "Something went wrong.",
+            });
+          }
+          setPurchasing(null);
+        });
 
         const [subsResult, prodsResult] = await Promise.allSettled([
           (fetchProducts as any)({ skus: SUBSCRIPTION_SKUS, type: 'subs' }),
@@ -129,30 +163,13 @@ export default function BillingScreen() {
             prices[p.id] ? { ...p, price: prices[p.id] } : p,
           ),
         );
-      } catch (e) {
-        console.log("[IAP] Init failed (expected in simulator):", e);
+      } catch (e: any) {
+        console.log("[IAP] Init failed:", e);
+        if (e?.code === "E_IAP_NOT_AVAILABLE") {
+          setBillingAvailable(false);
+        }
       }
     };
-
-    purchaseListener = purchaseUpdatedListener(async (purchase: Purchase) => {
-      const purchased =
-        purchase.purchaseState === 'purchased' ||
-        purchase.purchaseState == null;
-      if (!purchased) return;
-      await processPurchase(purchase);
-    });
-
-    errorListener = purchaseErrorListener((error: any) => {
-      if (error.code !== "E_USER_CANCELLED") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        showToast({
-          type: "error",
-          title: "Purchase Failed",
-          message: error.message || "Something went wrong.",
-        });
-      }
-      setPurchasing(null);
-    });
 
     init();
 
@@ -397,6 +414,20 @@ export default function BillingScreen() {
 
   if (loading) {
     return <LoadingState fullScreen message="Loading plans..." />;
+  }
+
+  if (!billingAvailable) {
+    return (
+      <ThemedView style={[styles.container, { justifyContent: "center", alignItems: "center", padding: Spacing["2xl"] }]}>
+        <Icon name="shopping-cart" size={48} color={theme.textSecondary} />
+        <ThemedText type="h2" style={{ textAlign: "center", marginTop: Spacing.xl, marginBottom: Spacing.md }}>
+          Purchases Unavailable
+        </ThemedText>
+        <ThemedText type="body" style={{ textAlign: "center", color: theme.textSecondary }}>
+          Purchases are unavailable in this environment.{"\n\n"}To manage your subscription, please use the production app on Google Play.
+        </ThemedText>
+      </ThemedView>
+    );
   }
 
   const recommendedProduct = getRecommendedProduct();
