@@ -107,7 +107,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npx expo start --web --clear --port 8081"
+args = "npx expo start --tunnel --clear --port 8081"
 waitForPort = 8081
 
 [userenv]
