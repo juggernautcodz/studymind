@@ -107,7 +107,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "EXPO_NO_PROMPT=1 npx expo start --tunnel --port 8081 --non-interactive"
+args = "EXPO_NO_PROMPT=1 EXPO_PUBLIC_API_URL=https://asset-manager-landrys424.replit.app npx expo start --tunnel --clear --port 8081"
 waitForPort = 8081
 
 [userenv]
