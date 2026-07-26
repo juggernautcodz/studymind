@@ -5,96 +5,27 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        margin: 0;
-        padding: 0;
-        background: #f8f9fa;
-        color: #333;
-        line-height: 1.6;
-      }
-      .header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 40px 20px;
-        text-align: center;
-      }
-      .header h1 {
-        margin: 0;
-        font-size: 32px;
-        font-weight: 700;
-      }
-      .header p {
-        margin: 10px 0 0;
-        opacity: 0.9;
-        font-size: 16px;
-      }
-      .container {
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 40px 20px;
-      }
-      .card {
-        background: white;
-        border-radius: 12px;
-        padding: 24px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      }
-      h2 {
-        color: #1a1a2e;
-        font-size: 20px;
-        margin: 0 0 16px;
-        font-weight: 600;
-      }
-      p {
-        margin: 0 0 12px;
-        color: #444;
-      }
-      ul {
-        margin: 0 0 12px;
-        padding-left: 24px;
-        color: #444;
-      }
-      li {
-        margin-bottom: 8px;
-      }
-      strong {
-        color: #1a1a2e;
-      }
-      .last-updated {
-        text-align: center;
-        color: #666;
-        font-size: 14px;
-        margin-bottom: 30px;
-      }
-      .contact-email {
-        color: #667eea;
-        text-decoration: none;
-        font-weight: 500;
-      }
-      .contact-email:hover {
-        text-decoration: underline;
-      }
-      .footer {
-        text-align: center;
-        padding: 30px 20px;
-        color: #666;
-        font-size: 14px;
-      }
-      .back-link {
-        display: inline-block;
-        margin-top: 20px;
-        color: #667eea;
-        text-decoration: none;
-        font-weight: 500;
-      }
-      .back-link:hover {
-        text-decoration: underline;
-      }
+      * { box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background: #f8f9fa; color: #333; line-height: 1.6; }
+      .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
+      .header h1 { margin: 0; font-size: 32px; font-weight: 700; }
+      .header p { margin: 10px 0 0; opacity: 0.9; font-size: 16px; }
+      .container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+      .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+      h2 { color: #1a1a2e; font-size: 20px; margin: 0 0 16px; font-weight: 600; }
+      p { margin: 0 0 12px; color: #444; }
+      ul { margin: 0 0 12px; padding-left: 24px; color: #444; }
+      li { margin-bottom: 8px; }
+      strong { color: #1a1a2e; }
+      .last-updated { text-align: center; color: #666; font-size: 14px; margin-bottom: 30px; }
+      .contact-email { color: #667eea; text-decoration: none; font-weight: 500; }
+      .contact-email:hover { text-decoration: underline; }
+      .footer { text-align: center; padding: 30px 20px; color: #666; font-size: 14px; }
+      .back-link { display: inline-block; margin: 8px; color: #667eea; text-decoration: none; font-weight: 500; }
+      .back-link:hover { text-decoration: underline; }
+      .permission-box { background: #f0f4ff; border-left: 4px solid #667eea; border-radius: 0 8px 8px 0; padding: 14px 18px; margin-bottom: 12px; }
+      .permission-box strong { display: block; margin-bottom: 4px; }
+      .permission-box p { margin: 0; font-size: 14px; }
     </style>
   </head>
   <body>
@@ -104,27 +35,51 @@
     </div>
 
     <div class="container">
-      <p class="last-updated">Last Updated: April 2026</p>
+      <p class="last-updated">Last Updated: July 26, 2025 &nbsp;·&nbsp; Effective: July 26, 2025</p>
 
       <div class="card">
         <h2>Introduction</h2>
         <p>Welcome to StudyMind. This privacy policy explains what information we collect, how we use it, and the choices you have. We believe in being straightforward about our data practices.</p>
         <p>StudyMind is a study app that helps you turn recordings, images, and text into organized study materials like notes, flashcards, and quizzes. You can use the app in guest mode without creating an account.</p>
+        <p>If you have questions, contact us at <a href="mailto:studymindv1@hotmail.com" class="contact-email">studymindv1@hotmail.com</a>.</p>
       </div>
 
       <div class="card">
         <h2>Information We Collect</h2>
-        <p><strong>Audio Recordings:</strong> When you record audio or upload audio files, the audio is sent to our server for AI-powered transcription. The audio is processed temporarily and the resulting text is returned to your device.</p>
-        <p><strong>Images:</strong> When you capture photos of notes, textbooks, or whiteboards, or select images from your gallery, the images are sent to our server for text extraction (OCR). The images are processed temporarily and the extracted text is returned to your device.</p>
-        <p><strong>Text Input:</strong> When you paste text from your clipboard, upload text files, or type content directly, that text is sent to our server for AI processing to generate study materials such as notes, flashcards, and quizzes.</p>
-        <p><strong>Study Content:</strong> The study materials generated by the app (notes, flashcards, quizzes, and course organization) are stored locally on your device.</p>
-        <p><strong>App Preferences:</strong> Settings such as your preferred language, notification preferences, and theme choice are stored locally on your device.</p>
+        <p><strong>Account Information:</strong> If you create an account, we collect your email address and a securely hashed password. We never store plain-text passwords.</p>
+        <p><strong>Audio Recordings:</strong> When you record audio or upload audio files, the audio is sent to our server for AI-powered transcription. The audio is processed temporarily and the resulting text is returned to your device. We do not permanently store your audio recordings after processing.</p>
+        <p><strong>Images:</strong> When you capture photos of notes, textbooks, or whiteboards, or select images from your gallery, the images are sent to our server for text extraction (OCR). The images are processed temporarily and the extracted text is returned to your device. We do not permanently store your images after processing.</p>
+        <p><strong>Text Input:</strong> When you paste text, upload text files, or type content directly, that text is sent to our server for AI processing to generate study materials. We do not permanently retain your text content after processing.</p>
+        <p><strong>Study Content:</strong> The study materials generated by the app (notes, flashcards, quizzes, and course organization) are stored locally on your device and optionally synced to our server if you have an account.</p>
+        <p><strong>App Preferences:</strong> Settings such as preferred language, notification preferences, and theme choice are stored locally on your device.</p>
+      </div>
+
+      <div class="card">
+        <h2>Device Permissions</h2>
+        <p>StudyMind requests the following device permissions to provide its core features:</p>
+        <div class="permission-box">
+          <strong>🎙️ Microphone</strong>
+          <p>Used only when you actively start a recording in the app to capture lectures and voice notes. StudyMind never records audio in the background. You can revoke this permission in device settings at any time.</p>
+        </div>
+        <div class="permission-box">
+          <strong>📷 Camera</strong>
+          <p>Used to capture photos of whiteboards, textbook pages, and handwritten notes for OCR text extraction. Photos are only taken when you tap the camera button — we never take photos without your direct action.</p>
+        </div>
+        <div class="permission-box">
+          <strong>🖼️ Photo Library / External Storage</strong>
+          <p>Used to import existing photos of notes and textbook pages that you specifically select. We cannot browse your full photo library — access is limited to images you explicitly choose.</p>
+        </div>
+        <div class="permission-box">
+          <strong>🔔 Notifications</strong>
+          <p>Used to send optional study reminders and notify you when AI processing of your recordings is complete. Notifications are off by default and can be disabled at any time in Settings or in device settings.</p>
+        </div>
       </div>
 
       <div class="card">
         <h2>Where Your Data Is Stored</h2>
-        <p><strong>On Your Device (Local Storage):</strong> The majority of your data lives on your device. This includes all study materials (notes, flashcards, quizzes), your course and topic organization, app settings and preferences, and notification schedules. There is no cross-device sync.</p>
+        <p><strong>On Your Device (Local Storage):</strong> The majority of your data lives on your device. This includes all study materials (notes, flashcards, quizzes), your course and topic organization, app settings and preferences, and notification schedules.</p>
         <p><strong>On Our Server (Temporary Processing Only):</strong> Audio, images, and text are sent to our server only when you use AI-powered features. This data is processed and the results are returned to your device. We do not permanently store your audio recordings, images, or text input on our servers after processing is complete.</p>
+        <p><strong>Account Sync (if signed in):</strong> If you create an account, your study content is synced to our secure servers so you can access it across devices.</p>
       </div>
 
       <div class="card">
@@ -135,15 +90,17 @@
           <li>Extract text from images of notes and textbooks</li>
           <li>Generate study notes, flashcards, and quizzes from your content</li>
           <li>Summarize text content you provide</li>
+          <li>Authenticate you and sync your study content across devices (if you have an account)</li>
+          <li>Send optional study reminder notifications you enable</li>
         </ul>
-        <p>We do not use your data for advertising, analytics, profiling, or any purpose other than providing the features you use within the app.</p>
+        <p>We do not use your data for advertising, profiling, or any purpose other than providing the features you use within the app.</p>
       </div>
 
       <div class="card">
         <h2>Third-Party Services</h2>
         <p>StudyMind uses the following third-party services:</p>
         <ul>
-          <li><strong>OpenAI:</strong> Audio, images, and text you submit for AI processing are sent to OpenAI's API for transcription, text extraction, and study material generation. OpenAI processes this data according to their <a href="https://openai.com/policies/privacy-policy" class="contact-email" target="_blank" rel="noopener">privacy policy</a>.</li>
+          <li><strong>OpenAI:</strong> Audio, images, and text you submit for AI processing are sent to OpenAI's API for transcription, text extraction, and study material generation. OpenAI processes this data according to their <a href="https://openai.com/policies/privacy-policy" class="contact-email" target="_blank" rel="noopener">privacy policy</a>. OpenAI is prohibited from using your content to train their AI models under our API agreement.</li>
           <li><strong>Google Play:</strong> In-app purchases and subscriptions are processed by Google Play. Payment information is handled entirely by Google and is never collected or stored by StudyMind.</li>
         </ul>
         <p>We do not sell, rent, or share your personal data with any other third parties.</p>
@@ -151,18 +108,18 @@
 
       <div class="card">
         <h2>Notifications</h2>
-        <p>StudyMind can send study reminders as local notifications on your device. Notifications are entirely optional and are not enabled by default. You can enable, disable, or customize them at any time in the app's Settings. All notification scheduling happens locally on your device. No notification data is sent to our servers.</p>
+        <p>StudyMind can send study reminders as local notifications on your device. Notifications are entirely optional and are not enabled by default. You can enable, disable, or customize them at any time in the app's Settings. You can also disable notifications for StudyMind in your Android device settings under Apps → StudyMind → Notifications.</p>
       </div>
 
       <div class="card">
         <h2>Data Deletion</h2>
-        <p>You have three options for deleting your data, available in the app's Settings:</p>
+        <p>You have full control over your data:</p>
         <ul>
-          <li><strong>Clear All Data</strong> (Settings &rarr; DATA section): Deletes all study data stored on your device, including semesters, courses, topics, notes, flashcards, and quizzes. Data stored on the server is not affected. This cannot be undone.</li>
+          <li><strong>Clear All Data</strong> (Settings &rarr; DATA section): Deletes all study data stored on your device. This cannot be undone.</li>
           <li><strong>Delete My Data</strong> (Settings &rarr; Privacy &amp; Data): Permanently deletes all your study content from both the server and your device. Your account remains active but empty. This cannot be undone.</li>
           <li><strong>Delete Account</strong> (Settings &rarr; DATA section): Permanently deletes your account and all associated data from both the server and your device, including study content and purchase history. This cannot be undone.</li>
         </ul>
-        <p>You can also request data deletion by contacting us at <a href="mailto:studymindv1@hotmail.com" class="contact-email">studymindv1@hotmail.com</a>.</p>
+        <p>You can also request data deletion by contacting us at <a href="mailto:studymindv1@hotmail.com" class="contact-email">studymindv1@hotmail.com</a>. We will complete the deletion within 30 days.</p>
       </div>
 
       <div class="card">
@@ -173,33 +130,62 @@
           <li><strong>Export your content</strong> as PDF or text files using the share feature on any study material screen</li>
           <li><strong>Manage notifications</strong> by enabling or disabling study reminders in Settings</li>
           <li><strong>Use guest mode</strong> without creating an account or providing personal information</li>
+          <li><strong>Revoke permissions</strong> (microphone, camera, photos) at any time in Android device settings</li>
         </ul>
       </div>
 
       <div class="card">
+        <h2>California Residents — CCPA Rights</h2>
+        <p>If you are a California resident, you have the following rights under the California Consumer Privacy Act (CCPA):</p>
+        <ul>
+          <li><strong>Right to Know:</strong> You can request information about what personal data we collect and how we use it.</li>
+          <li><strong>Right to Delete:</strong> You can request deletion of personal information we have collected. See the Data Deletion section above.</li>
+          <li><strong>Right to Opt Out of Sale:</strong> We do not sell your personal information to third parties.</li>
+          <li><strong>Right to Non-Discrimination:</strong> We will not discriminate against you for exercising your CCPA rights.</li>
+        </ul>
+        <p>To exercise your CCPA rights, contact us at <a href="mailto:studymindv1@hotmail.com" class="contact-email">studymindv1@hotmail.com</a>. We respond within 45 days.</p>
+      </div>
+
+      <div class="card">
+        <h2>EU/EEA Users — GDPR Rights</h2>
+        <p>If you are in the European Economic Area, you have the following rights under GDPR:</p>
+        <ul>
+          <li><strong>Right of Access:</strong> Request a copy of the personal data we hold about you.</li>
+          <li><strong>Right to Rectification:</strong> Request correction of inaccurate data.</li>
+          <li><strong>Right to Erasure:</strong> Request deletion of your personal data ("right to be forgotten").</li>
+          <li><strong>Right to Data Portability:</strong> Request your data in a portable format.</li>
+          <li><strong>Right to Object:</strong> Object to processing of your data.</li>
+        </ul>
+        <p>Our legal basis for processing is contract performance (providing the service you signed up for). To exercise GDPR rights, email <a href="mailto:studymindv1@hotmail.com" class="contact-email">studymindv1@hotmail.com</a>. We respond within 30 days.</p>
+      </div>
+
+      <div class="card">
         <h2>Data Security</h2>
-        <p>We take reasonable measures to protect your information. Data transmitted between the app and our server is encrypted in transit. Study content stored on your device is protected by your device's built-in security features (screen lock, encryption). We do not store your audio recordings, images, or text on our servers longer than necessary to complete processing.</p>
+        <p>We take reasonable measures to protect your information. Data transmitted between the app and our server is encrypted in transit using HTTPS (TLS). Study content stored on your device is protected by your device's built-in security features (screen lock, encryption). We do not store your audio recordings, images, or text on our servers longer than necessary to complete processing.</p>
       </div>
 
       <div class="card">
         <h2>Children's Privacy</h2>
-        <p>StudyMind is intended for users aged 13 and older. We do not knowingly collect personal information from children under 13. If you believe a child under 13 has provided us with personal information, please contact us and we will take steps to delete that information.</p>
+        <p>StudyMind is intended for users aged 13 and older. We do not knowingly collect personal information from children under 13. If you believe a child under 13 has provided us with personal information, please contact us at <a href="mailto:studymindv1@hotmail.com" class="contact-email">studymindv1@hotmail.com</a> and we will delete that information promptly.</p>
       </div>
 
       <div class="card">
         <h2>Changes to This Policy</h2>
-        <p>We may update this privacy policy from time to time. When we make changes, we will update the "Last Updated" date at the top of this page. We encourage you to review this policy periodically.</p>
+        <p>We may update this privacy policy from time to time. When we make changes, we will update the "Last Updated" date at the top of this page. For significant changes, we will notify you via the app or email.</p>
       </div>
 
       <div class="card">
         <h2>Contact Us</h2>
-        <p>If you have questions about this privacy policy or your data, please contact us at:</p>
+        <p>If you have questions about this privacy policy or your data, please contact us:</p>
         <p><a href="mailto:studymindv1@hotmail.com" class="contact-email">studymindv1@hotmail.com</a></p>
+        <p>We respond to all privacy inquiries within 48 hours on business days.</p>
       </div>
 
       <div class="footer">
-        <p>&copy; 2026 StudyMind. All rights reserved.</p>
+        <p>&copy; 2025 StudyMind. All rights reserved.</p>
         <a href="/" class="back-link">Back to Home</a>
+        <a href="/terms" class="back-link">Terms of Service</a>
+        <a href="/help" class="back-link">Help &amp; Support</a>
       </div>
     </div>
   </body>
