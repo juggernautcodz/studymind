@@ -91,6 +91,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.warn("Failed to load search routes:", err);
   }
 
+  // StudyMind Web PC companion — sync API
+  try {
+    const syncRoutes = (await import("./sync")).default;
+    safeMount(app, "/api/sync", syncRoutes, "sync");
+  } catch (err) {
+    console.warn("Failed to load sync routes:", err);
+  }
+
   console.log("Route registration complete.");
 
   const httpServer = createServer(app);
