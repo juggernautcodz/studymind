@@ -72,8 +72,13 @@ const BENEFITS = [
   { icon: "brain" as const, text: "Remember more with spaced repetition" },
 ];
 
-const SUBSCRIPTION_SKUS = ["com.studymind.pro.monthly", "com.studymind.pro.yearly"];
-const PRODUCT_SKUS = ["com.studymind.base.lifetime"];
+const SUBSCRIPTION_SKUS = [
+  "com.studymind.plus.monthly",
+  "com.studymind.plus.yearly",
+  "com.studymind.pro.monthly",
+  "com.studymind.pro.yearly",
+];
+const PRODUCT_SKUS: string[] = [];
 
 // True when running inside Expo Go — IAP native module is not available there.
 const IS_EXPO_GO = Constants.appOwnership === "expo";

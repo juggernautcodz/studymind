@@ -4,7 +4,7 @@
  * Defines what each plan tier unlocks and usage limits.
  */
 
-export type PlanType = "FREE" | "BASE" | "PLUS" | "PRO";
+export type PlanType = "FREE" | "PLUS" | "PRO";
 
 export interface PlanLimits {
   maxRecordingsLifetime: number;
@@ -44,22 +44,11 @@ export interface PaywallError {
 
 export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   FREE: {
-    maxRecordingsLifetime: 2,
-    maxTranscriptionMinutesPerMonth: 30,
-    hasFlashcards: false,
-    hasNotes: true,
-    hasMindMap: false,
-    hasQuizzes: false,
-    hasAdaptiveReview: false,
-    hasExamMode: false,
-    hasExport: false,
-  },
-  BASE: {
-    maxRecordingsLifetime: -1,
-    maxTranscriptionMinutesPerMonth: 60,
+    maxRecordingsLifetime: 3,
+    maxTranscriptionMinutesPerMonth: 45,
     hasFlashcards: true,
     hasNotes: true,
-    hasMindMap: true,
+    hasMindMap: false,
     hasQuizzes: false,
     hasAdaptiveReview: false,
     hasExamMode: false,
@@ -91,52 +80,67 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
 
 export const PRODUCTS = [
   {
-    id: "com.studymind.base.lifetime",
-    name: "StudyMind Base",
-    description: "Lifetime unlock - Mind maps, flashcards, and notes",
-    plan: "BASE" as PlanType,
-    type: "non-consumable" as const,
-    price: "$9.99",
+    id: "com.studymind.plus.monthly",
+    name: "StudyMind Plus Monthly",
+    description: "Unlimited recordings, quizzes, and 120 min/mo transcription",
+    plan: "PLUS" as PlanType,
+    type: "subscription" as const,
+    period: "monthly",
+    price: "$3.99/month",
     features: [
-      "Mind map visualization",
-      "Flashcard generation",
+      "Unlimited recordings",
+      "120 min transcription/month",
       "AI-generated notes",
-      "60 min transcription/month",
+      "Flashcard generation",
+      "Quiz generation",
+    ],
+  },
+  {
+    id: "com.studymind.plus.yearly",
+    name: "StudyMind Plus Yearly",
+    description: "Best value Plus plan - save 37%",
+    plan: "PLUS" as PlanType,
+    type: "subscription" as const,
+    period: "yearly",
+    price: "$29.99/year",
+    features: [
+      "Everything in Plus Monthly",
+      "Save 37% vs monthly",
+      "Unlimited recordings",
+      "120 min transcription/month",
     ],
   },
   {
     id: "com.studymind.pro.monthly",
     name: "StudyMind Pro Monthly",
-    description: "Full access - Quizzes, exam mode, and more",
+    description: "Full access - Exam mode, adaptive study engine, and 300 min/mo",
     plan: "PRO" as PlanType,
     type: "subscription" as const,
     period: "monthly",
-    price: "$4.99/month",
+    price: "$7.99/month",
     features: [
-      "Everything in Base",
-      "Quiz generation",
+      "Everything in Plus",
+      "Exam mode & grade analytics",
       "Adaptive study engine",
-      "Exam mode",
       "300 min transcription/month",
-      "PDF export",
+      "PDF export & priority support",
     ],
   },
   {
     id: "com.studymind.pro.yearly",
     name: "StudyMind Pro Yearly",
-    description: "Full access - Best value at 2 months free",
+    description: "Best overall value - 2 months free",
     plan: "PRO" as PlanType,
     type: "subscription" as const,
     period: "yearly",
-    price: "$49.99/year",
+    price: "$59.99/year",
     features: [
-      "Everything in Base",
-      "Quiz generation",
-      "Adaptive study engine",
-      "Exam mode",
-      "300 min transcription/month",
-      "PDF export",
+      "Everything in Pro Monthly",
       "2 months free vs monthly",
+      "Exam mode & grade analytics",
+      "Adaptive study engine",
+      "300 min transcription/month",
+      "PDF export & priority support",
     ],
   },
 ];
@@ -181,9 +185,9 @@ export function checkRecordingLimit(
       allowed: false,
       error: {
         type: "PAYWALL_REQUIRED",
-        planRequired: "BASE",
+        planRequired: "PLUS",
         upgradeOptions: [
-          "com.studymind.base.lifetime",
+          "com.studymind.plus.monthly",
           "com.studymind.pro.monthly",
         ],
         currentUsage: {
@@ -194,7 +198,7 @@ export function checkRecordingLimit(
         },
         limit: limits.maxRecordingsLifetime,
         feature: "recordings",
-        message: `You've reached the limit of ${limits.maxRecordingsLifetime} recordings. Upgrade to continue recording.`,
+        message: `You've reached the limit of ${limits.maxRecordingsLifetime} free recordings. Upgrade to Plus or Pro to continue.`,
       },
     };
   }
@@ -220,10 +224,10 @@ export function checkTranscriptionLimit(
       allowed: false,
       error: {
         type: "PAYWALL_REQUIRED",
-        planRequired: plan === "FREE" ? "BASE" : "PRO",
+        planRequired: plan === "FREE" ? "PLUS" : "PRO",
         upgradeOptions:
           plan === "FREE"
-            ? ["com.studymind.base.lifetime", "com.studymind.pro.monthly"]
+            ? ["com.studymind.plus.monthly", "com.studymind.pro.monthly"]
             : ["com.studymind.pro.monthly"],
         currentUsage: {
           recordingsCount: 0,
