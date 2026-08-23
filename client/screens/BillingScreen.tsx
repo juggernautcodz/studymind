@@ -100,6 +100,7 @@ export default function BillingScreen() {
   const [showRestoreSheet, setShowRestoreSheet] = useState(false);
   const [billingAvailable, setBillingAvailable] = useState(true);
   const gpPricesRef = useRef<Record<string, string>>({});
+  const androidOfferTokensRef = useRef<Record<string, string>>({});
   const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearPurchasingState = () => {
@@ -111,7 +112,7 @@ export default function BillingScreen() {
   };
 
   useEffect(() => {
-    fetchProducts();
+    fetchServerProducts();
     fetchEntitlements();
   }, []);
 
@@ -158,10 +159,22 @@ export default function BillingScreen() {
         ]);
 
         const prices: Record<string, string> = {};
+        const offerTokens: Record<string, string> = {};
         if (subsResult.status === "fulfilled") {
           for (const s of subsResult.value) {
             if ((s as any).localizedPrice) {
               prices[s.productId] = (s as any).localizedPrice;
+            }
+            // Android subscriptions with multiple base plans/offers need an
+            // explicit offerToken passed to requestPurchase(), or Google Play's
+            // native purchase UI can't resolve a proper title for the offer and
+            // falls back to showing the raw base plan ID (e.g. "plus-monthly-base")
+            // instead of the subscription's configured display name.
+            const offerToken =
+              (s as any).subscriptionOffers?.[0]?.offerTokenAndroid ||
+              (s as any).subscriptionOfferDetailsAndroid?.[0]?.offerToken;
+            if (offerToken) {
+              offerTokens[s.productId] = offerToken;
             }
           }
         }
@@ -173,6 +186,7 @@ export default function BillingScreen() {
           }
         }
         gpPricesRef.current = prices;
+        androidOfferTokensRef.current = offerTokens;
 
         setProducts((prev) =>
           prev.map((p) =>
@@ -252,7 +266,7 @@ export default function BillingScreen() {
     }
   };
 
-  const fetchProducts = async () => {
+  const fetchServerProducts = async () => {
     try {
       const url = new URL("/api/billing/products", getApiUrl());
       const response = await fetch(url.toString());
@@ -283,9 +297,15 @@ export default function BillingScreen() {
     setPurchasing(product.id);
 
     try {
+      const offerToken = androidOfferTokensRef.current[product.id];
       await requestPurchase({
         request: {
-          google: { skus: [product.id] },
+          google: {
+            skus: [product.id],
+            ...(product.type === "subscription" && offerToken
+              ? { subscriptionOffers: [{ sku: product.id, offerToken }] }
+              : {}),
+          },
           apple: { sku: product.id },
         },
         type: product.type === "subscription" ? 'subs' : 'in-app',
