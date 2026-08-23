@@ -8,10 +8,8 @@ const { withAndroidStyles } = require("expo/config-plugins");
 // the fix survives rebuilds instead of hand-editing the generated styles.xml.
 module.exports = function withEdgeToEdgeStyles(config) {
   return withAndroidStyles(config, (config) => {
-    const styles = config.modResults.resources.style;
-    const appTheme = Array.isArray(styles)
-      ? styles.find((s) => s.$.name === "AppTheme")
-      : undefined;
+    const styles = [].concat(config.modResults.resources.style || []);
+    const appTheme = styles.find((s) => s.$.name === "AppTheme");
     if (appTheme && Array.isArray(appTheme.item)) {
       appTheme.item = appTheme.item.filter(
         (item) =>
