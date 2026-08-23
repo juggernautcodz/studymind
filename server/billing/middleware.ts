@@ -41,9 +41,9 @@ const FEATURE_TO_LIMIT_KEY: Record<
 };
 
 const FEATURE_TO_REQUIRED_PLAN: Record<Feature, PlanType> = {
-  flashcards: "BASE",
+  flashcards: "PLUS",
   notes: "FREE",
-  mindmap: "BASE",
+  mindmap: "PLUS",
   quizzes: "PRO",
   adaptive_review: "PRO",
   exam_mode: "PRO",
@@ -99,9 +99,9 @@ function getUpgradeOptions(
   if (requiredPlan === "PRO") {
     return ["com.studymind.pro.monthly", "com.studymind.pro.yearly"];
   }
-  if (requiredPlan === "BASE" && currentPlan === "FREE") {
+  if (requiredPlan === "PLUS" && currentPlan === "FREE") {
     return [
-      "com.studymind.base.lifetime",
+      "com.studymind.plus.monthly",
       "com.studymind.pro.monthly",
       "com.studymind.pro.yearly",
     ];
@@ -153,8 +153,8 @@ export function requireEntitlement(feature: Feature) {
         if (maxRecordings !== -1 && usage.recordingsCount >= maxRecordings) {
           const paywallError: PaywallError = {
             type: "PAYWALL_REQUIRED",
-            planRequired: "BASE",
-            upgradeOptions: getUpgradeOptions(plan, "BASE"),
+            planRequired: "PLUS",
+            upgradeOptions: getUpgradeOptions(plan, "PLUS"),
             currentUsage: usage,
             limit: maxRecordings,
             feature: "recording",
@@ -173,10 +173,10 @@ export function requireEntitlement(feature: Feature) {
         if (maxMinutes !== -1 && usage.transcriptionMinutesUsed >= maxMinutes) {
           const paywallError: PaywallError = {
             type: "PAYWALL_REQUIRED",
-            planRequired: plan === "FREE" ? "BASE" : "PRO",
+            planRequired: plan === "FREE" ? "PLUS" : "PRO",
             upgradeOptions: getUpgradeOptions(
               plan,
-              plan === "FREE" ? "BASE" : "PRO",
+              plan === "FREE" ? "PLUS" : "PRO",
             ),
             currentUsage: usage,
             limit: maxMinutes,

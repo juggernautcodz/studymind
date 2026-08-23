@@ -18,7 +18,7 @@ const openai = USE_REAL_AI
     })
   : null;
 
-type Plan = "FREE" | "BASE" | "PRO";
+type Plan = "FREE" | "PLUS" | "PRO";
 
 async function getUserPlan(userId: string): Promise<Plan> {
   try {
@@ -27,7 +27,7 @@ async function getUserPlan(userId: string): Promise<Plan> {
     if (ent.expiresAt && ent.expiresAt.getTime() < Date.now()) return "FREE";
     const p = ent.plan.toUpperCase();
     if (p === "PRO") return "PRO";
-    if (p === "BASE") return "BASE";
+    if (p === "PLUS") return "PLUS";
     return "FREE";
   } catch {
     return "FREE";
@@ -41,7 +41,7 @@ function requirePlan(...allowed: Plan[]) {
     if (req.user?.email === REVIEWER_EMAIL) return next();
     const plan = await getUserPlan(req.user!.id);
     if (allowed.includes(plan)) return next();
-    const highest = allowed.includes("BASE") ? "BASE" : "PRO";
+    const highest = allowed.includes("PLUS") ? "PLUS" : "PRO";
     return res
       .status(403)
       .json({ type: "PAYWALL_REQUIRED", planRequired: highest });

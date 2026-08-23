@@ -4104,7 +4104,7 @@ async function getUserPlan2(userId) {
     if (ent.expiresAt && ent.expiresAt.getTime() < Date.now()) return "FREE";
     const p = ent.plan.toUpperCase();
     if (p === "PRO") return "PRO";
-    if (p === "BASE") return "BASE";
+    if (p === "PLUS") return "PLUS";
     return "FREE";
   } catch {
     return "FREE";

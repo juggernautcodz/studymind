@@ -178,7 +178,7 @@ export default function SettingsScreen() {
     switch (user?.plan) {
       case "PRO":
         return theme.success;
-      case "BASE":
+      case "PLUS":
         return theme.info;
       default:
         return theme.textSecondary;
@@ -189,7 +189,7 @@ export default function SettingsScreen() {
     switch (user?.plan) {
       case "PRO":
         return "success";
-      case "BASE":
+      case "PLUS":
         return "info";
       default:
         return "default";

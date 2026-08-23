@@ -18,11 +18,17 @@ StudyMind uses platform-native In-App Purchases for monetization:
 - Basic notes only
 - No flashcard generation, quizzes, or advanced features
 
-### BASE (One-Time Purchase - $9.99)
-- **Product ID**: `com.studymind.base.lifetime`
-- **Type**: Non-consumable (lifetime unlock)
-- Unlocks: Mind map, flashcards, notes
-- 60 min transcription/month
+### PLUS (Auto-Renewing Subscription)
+- **Product IDs**:
+  - `com.studymind.plus.monthly` ($9.99/month)
+  - `com.studymind.plus.yearly` ($59.99/year)
+- **Type**: Auto-renewing subscription
+- Unlocks: Unlimited recordings, mind map, flashcards, quizzes
+- 150 min transcription/month
+
+> Legacy: `com.studymind.base.lifetime` was a one-time-purchase lifetime unlock,
+> retired when the lifetime plan was removed. Kept in the validators only so
+> existing holders can still restore/verify their past purchase.
 
 ### PRO (Auto-Renewing Subscription)
 - **Product IDs**: 
@@ -59,7 +65,7 @@ model Purchase {
 model Entitlement {
   id        String    @id @default(uuid())
   userId    String    @unique
-  plan      String    // 'FREE' | 'BASE' | 'PRO'
+  plan      String    // 'FREE' | 'PLUS' | 'PRO'
   expiresAt DateTime? // null for lifetime/free
   source    String    // 'free' | 'iap'
 }

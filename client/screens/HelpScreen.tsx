@@ -174,7 +174,7 @@ const MORE_FAQ: FAQItem[] = [
   {
     question: "What are the different plans?",
     answer:
-      "FREE: Get started with basic features. BASE: One-time purchase for unlimited recordings. PRO: Monthly or yearly subscription for all features plus priority AI processing.",
+      "FREE: Get started with basic features. PLUS: Monthly or yearly subscription for unlimited recordings and 150 min/month transcription. PRO: Monthly or yearly subscription for all features plus priority AI processing.",
     icon: "credit-card",
   },
   {
