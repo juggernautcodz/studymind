@@ -11,7 +11,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { useAuth } from "./AuthContext";
 
-export type PlanType = "FREE" | "BASE" | "PRO";
+export type PlanType = "FREE" | "PLUS" | "PRO";
 
 export interface PlanLimits {
   maxRecordingsLifetime: number;
@@ -311,7 +311,7 @@ export function usePaywall() {
       "hasExport",
     ].includes(feature)
       ? "PRO"
-      : "BASE";
+      : "PLUS";
 
     return {
       type: "PAYWALL_REQUIRED",
@@ -319,7 +319,7 @@ export function usePaywall() {
       upgradeOptions:
         planRequired === "PRO"
           ? ["com.studymind.pro.monthly", "com.studymind.pro.yearly"]
-          : ["com.studymind.base.lifetime", "com.studymind.pro.monthly"],
+          : ["com.studymind.plus.monthly", "com.studymind.plus.yearly"],
       currentUsage: {
         recordingsCount: 0,
         transcriptionMinutesUsed: 0,

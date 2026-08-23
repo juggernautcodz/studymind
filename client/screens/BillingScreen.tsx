@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import Constants from "expo-constants";
 import {
   View,
   StyleSheet,
@@ -33,6 +34,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBilling } from "@/contexts/BillingContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 
@@ -71,8 +73,16 @@ const BENEFITS = [
   { icon: "brain" as const, text: "Remember more with spaced repetition" },
 ];
 
-const SUBSCRIPTION_SKUS = ["com.studymind.pro.monthly", "com.studymind.pro.yearly"];
-const PRODUCT_SKUS = ["com.studymind.base.lifetime"];
+const SUBSCRIPTION_SKUS = [
+  "com.studymind.plus.monthly",
+  "com.studymind.plus.yearly",
+  "com.studymind.pro.monthly",
+  "com.studymind.pro.yearly",
+];
+const PRODUCT_SKUS: string[] = [];
+
+// True when running inside Expo Go — IAP native module is not available there.
+const IS_EXPO_GO = Constants.appOwnership === "expo";
 
 export default function BillingScreen() {
   const { theme } = useTheme();
@@ -80,6 +90,7 @@ export default function BillingScreen() {
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation();
   const { user, updateUser } = useAuth();
+  const { verifyPurchase: verifyPurchaseWithContext, refreshEntitlements } = useBilling();
 
   const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -87,14 +98,33 @@ export default function BillingScreen() {
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
   const [showRestoreSheet, setShowRestoreSheet] = useState(false);
+  const [billingAvailable, setBillingAvailable] = useState(true);
   const gpPricesRef = useRef<Record<string, string>>({});
+  const androidOfferTokensRef = useRef<Record<string, string>>({});
+  const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPurchasingState = () => {
+    if (purchaseTimeoutRef.current) {
+      clearTimeout(purchaseTimeoutRef.current);
+      purchaseTimeoutRef.current = null;
+    }
+    setPurchasing(null);
+  };
 
   useEffect(() => {
-    fetchProducts();
+    fetchServerProducts();
     fetchEntitlements();
   }, []);
 
   useEffect(() => {
+    // Expo Go does not ship the native IAP module — skip all IAP init to
+    // prevent an E_IAP_NOT_AVAILABLE crash. The friendly fallback UI renders
+    // instead. Production / dev-client builds run the full flow below.
+    if (IS_EXPO_GO) {
+      setBillingAvailable(false);
+      return;
+    }
+
     let purchaseListener: { remove: () => void } | null = null;
     let errorListener: { remove: () => void } | null = null;
 
@@ -102,16 +132,49 @@ export default function BillingScreen() {
       try {
         await initConnection();
 
+        // Only register listeners after a successful connection.
+        purchaseListener = purchaseUpdatedListener(async (purchase: Purchase) => {
+          const purchased =
+            purchase.purchaseState === 'purchased' ||
+            purchase.purchaseState == null;
+          if (!purchased) return;
+          await processPurchase(purchase);
+        });
+
+        errorListener = purchaseErrorListener((error: any) => {
+          if (error.code !== "E_USER_CANCELLED") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            showToast({
+              type: "error",
+              title: "Purchase Failed",
+              message: error.message || "Something went wrong.",
+            });
+          }
+          clearPurchasingState();
+        });
+
         const [subsResult, prodsResult] = await Promise.allSettled([
           (fetchProducts as any)({ skus: SUBSCRIPTION_SKUS, type: 'subs' }),
           (fetchProducts as any)({ skus: PRODUCT_SKUS, type: 'in-app' }),
         ]);
 
         const prices: Record<string, string> = {};
+        const offerTokens: Record<string, string> = {};
         if (subsResult.status === "fulfilled") {
           for (const s of subsResult.value) {
             if ((s as any).localizedPrice) {
               prices[s.productId] = (s as any).localizedPrice;
+            }
+            // Android subscriptions with multiple base plans/offers need an
+            // explicit offerToken passed to requestPurchase(), or Google Play's
+            // native purchase UI can't resolve a proper title for the offer and
+            // falls back to showing the raw base plan ID (e.g. "plus-monthly-base")
+            // instead of the subscription's configured display name.
+            const offerToken =
+              (s as any).subscriptionOffers?.[0]?.offerTokenAndroid ||
+              (s as any).subscriptionOfferDetailsAndroid?.[0]?.offerToken;
+            if (offerToken) {
+              offerTokens[s.productId] = offerToken;
             }
           }
         }
@@ -123,36 +186,20 @@ export default function BillingScreen() {
           }
         }
         gpPricesRef.current = prices;
+        androidOfferTokensRef.current = offerTokens;
 
         setProducts((prev) =>
           prev.map((p) =>
             prices[p.id] ? { ...p, price: prices[p.id] } : p,
           ),
         );
-      } catch (e) {
-        console.log("[IAP] Init failed (expected in simulator):", e);
+      } catch (e: any) {
+        console.log("[IAP] Init failed:", e);
+        if (e?.code === "E_IAP_NOT_AVAILABLE") {
+          setBillingAvailable(false);
+        }
       }
     };
-
-    purchaseListener = purchaseUpdatedListener(async (purchase: Purchase) => {
-      const purchased =
-        purchase.purchaseState === 'purchased' ||
-        purchase.purchaseState == null;
-      if (!purchased) return;
-      await processPurchase(purchase);
-    });
-
-    errorListener = purchaseErrorListener((error: any) => {
-      if (error.code !== "E_USER_CANCELLED") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        showToast({
-          type: "error",
-          title: "Purchase Failed",
-          message: error.message || "Something went wrong.",
-        });
-      }
-      setPurchasing(null);
-    });
 
     init();
 
@@ -160,35 +207,51 @@ export default function BillingScreen() {
       purchaseListener?.remove();
       errorListener?.remove();
       endConnection().catch(() => {});
+      if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
     };
   }, []);
 
   const processPurchase = async (purchase: Purchase) => {
     try {
-      const verifyUrl = new URL("/api/billing/verify", getApiUrl());
-      const response = await apiRequest("POST", verifyUrl.toString(), {
-        platform: "android",
-        productId: purchase.productId,
-        purchaseToken: purchase.purchaseToken,
-      });
+      // Delegate to BillingContext.verifyPurchase — it derives the correct
+      // platform from Platform.OS (this screen used to hardcode "android",
+      // which broke iOS verification) and keeps BillingContext's own
+      // entitlement/usage state in sync instead of drifting from it.
+      const success = await verifyPurchaseWithContext(
+        purchase.productId,
+        undefined,
+        purchase.purchaseToken || undefined,
+      );
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Purchase verification failed");
+      if (!success) {
+        throw new Error("Purchase verification failed");
       }
 
-      const result = await response.json();
-
-      await finishTransaction({ purchase, isConsumable: false });
-      await updateUser({ plan: result.entitlement.plan });
-      setEntitlement(result.entitlement);
+      // The purchase is already granted server-side once verify succeeds —
+      // update local state and tell the user now, so a subsequent
+      // finishTransaction failure (network hiccup, store glitch) doesn't
+      // get reported as a purchase failure when it already succeeded.
+      const freshEntitlement = await fetchEntitlements();
+      if (freshEntitlement) {
+        await updateUser({ plan: freshEntitlement.plan as "FREE" | "PLUS" | "PRO" });
+      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast({
         type: "success",
-        title: "Welcome to " + result.entitlement.plan,
+        title: "Welcome to " + (freshEntitlement?.plan || "your new plan"),
         message: "You now have full access to all features!",
       });
+
+      try {
+        await finishTransaction({ purchase, isConsumable: false });
+      } catch (finishError) {
+        console.warn(
+          "[IAP] finishTransaction failed after a successful verify — purchase is still granted:",
+          finishError,
+        );
+      }
+
       navigation.goBack();
     } catch (error: any) {
       console.error("[IAP] processPurchase error:", error);
@@ -199,11 +262,11 @@ export default function BillingScreen() {
         message: error.message || "Something went wrong. Please try again.",
       });
     } finally {
-      setPurchasing(null);
+      clearPurchasingState();
     }
   };
 
-  const fetchProducts = async () => {
+  const fetchServerProducts = async () => {
     try {
       const url = new URL("/api/billing/products", getApiUrl());
       const response = await fetch(url.toString());
@@ -216,14 +279,16 @@ export default function BillingScreen() {
     }
   };
 
-  const fetchEntitlements = async () => {
+  const fetchEntitlements = async (): Promise<Entitlement | null> => {
     try {
       const url = new URL("/api/billing/entitlements", getApiUrl());
       const response = await apiRequest("GET", url.toString());
       const data = await response.json();
       setEntitlement(data.entitlement);
+      return data.entitlement;
     } catch (error) {
       console.log("Failed to fetch entitlements (may not be authenticated)");
+      return null;
     }
   };
 
@@ -232,14 +297,28 @@ export default function BillingScreen() {
     setPurchasing(product.id);
 
     try {
+      const offerToken = androidOfferTokensRef.current[product.id];
       await requestPurchase({
         request: {
-          google: { skus: [product.id] },
+          google: {
+            skus: [product.id],
+            ...(product.type === "subscription" && offerToken
+              ? { subscriptionOffers: [{ sku: product.id, offerToken }] }
+              : {}),
+          },
           apple: { sku: product.id },
         },
         type: product.type === "subscription" ? 'subs' : 'in-app',
       });
-      // Purchase result handled in purchaseUpdatedListener
+      // Purchase result handled in purchaseUpdatedListener. As a safety net,
+      // if the listener never fires (e.g. the app was backgrounded during
+      // the native purchase UI, or it raced initConnection), clear the
+      // spinner after a while so the button doesn't stay stuck forever.
+      if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
+      purchaseTimeoutRef.current = setTimeout(() => {
+        purchaseTimeoutRef.current = null;
+        setPurchasing((current) => (current === product.id ? null : current));
+      }, 30000);
     } catch (error: any) {
       if (error.code !== "E_USER_CANCELLED") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -249,7 +328,7 @@ export default function BillingScreen() {
           message: error.message || "Something went wrong. Please try again.",
         });
       }
-      setPurchasing(null);
+      clearPurchasingState();
     }
   };
 
@@ -270,8 +349,12 @@ export default function BillingScreen() {
         await processPurchase(purchase);
       }
     } catch (err: any) {
-      await fetchEntitlements();
-      showToast({ type: "success", title: "Done", message: "Your purchase history has been checked." });
+      console.error("[IAP] confirmRestore error:", err);
+      showToast({
+        type: "error",
+        title: "Restore Failed",
+        message: err?.message || "Could not check your purchase history. Please try again.",
+      });
     }
   };
 
@@ -366,7 +449,7 @@ export default function BillingScreen() {
                 : "one-time"}
             </ThemedText>
             {product.period === "yearly" ? (
-              <Badge label="Save 17%" variant="success" />
+              <Badge label="Save 50%" variant="success" />
             ) : null}
           </View>
         </View>
@@ -397,6 +480,20 @@ export default function BillingScreen() {
 
   if (loading) {
     return <LoadingState fullScreen message="Loading plans..." />;
+  }
+
+  if (!billingAvailable) {
+    return (
+      <ThemedView style={[styles.container, { justifyContent: "center", alignItems: "center", padding: Spacing["2xl"] }]}>
+        <Icon name="shopping-cart" size={48} color={theme.textSecondary} />
+        <ThemedText type="h2" style={{ textAlign: "center", marginTop: Spacing.xl, marginBottom: Spacing.md }}>
+          Purchases Unavailable
+        </ThemedText>
+        <ThemedText type="body" style={{ textAlign: "center", color: theme.textSecondary }}>
+          Purchases are unavailable in this environment.{"\n\n"}To manage your subscription, please use the production app on Google Play.
+        </ThemedText>
+      </ThemedView>
+    );
   }
 
   const recommendedProduct = getRecommendedProduct();

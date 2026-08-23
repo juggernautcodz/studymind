@@ -14,6 +14,7 @@ import {
   PLAN_LIMITS,
   getPlanLimits,
   getCurrentMonthKey,
+  getProductPlan,
   PlanType,
 } from "./billing/entitlements";
 
@@ -51,41 +52,41 @@ router.get("/plans", async (_req: Request, res: Response) => {
           price: 0,
           description: "Get started with basic features",
           features: [
-            "2 recordings lifetime",
-            "30 minutes transcription",
-            "Basic notes",
+            "3 recordings total",
+            "45 minutes transcription",
+            "AI notes & flashcards",
           ],
           limits: PLAN_LIMITS.FREE,
         },
         {
-          id: "BASE",
-          name: "StudyMind Base",
+          id: "PLUS",
+          name: "StudyMind Plus",
           price: 9.99,
-          type: "lifetime",
-          description: "One-time purchase - Mind maps, flashcards, and notes",
+          type: "subscription",
+          period: "monthly",
+          description: "Unlimited recordings, quizzes, and 150 min/mo transcription",
           features: [
-            "Mind map visualization",
-            "Flashcard generation",
-            "AI-generated notes",
-            "60 min transcription/month",
+            "Unlimited recordings",
+            "150 min transcription/month",
+            "Quiz generation",
+            "Full web + mobile access",
           ],
-          limits: PLAN_LIMITS.BASE,
-          productId: "com.studymind.base.lifetime",
+          limits: PLAN_LIMITS.PLUS,
+          productId: "com.studymind.plus.monthly",
         },
         {
           id: "PRO",
           name: "StudyMind Pro",
-          price: 4.99,
+          price: 19.99,
           type: "subscription",
           period: "monthly",
-          description: "Full access - Quizzes, exam mode, and more",
+          description: "Full access - Exam mode, adaptive study engine, 450 min/mo",
           features: [
-            "Everything in Base",
-            "Quiz generation",
+            "Everything in Plus",
+            "Exam mode & grade analytics",
             "Adaptive study engine",
-            "Exam mode",
-            "300 min transcription/month",
-            "PDF export",
+            "450 min transcription/month",
+            "PDF export & priority AI speed",
           ],
           limits: PLAN_LIMITS.PRO,
           productId: "com.studymind.pro.monthly",
@@ -140,9 +141,7 @@ router.post(
       if (isDevTestToken) {
         tokenOrTxnId =
           purchaseToken || transactionId || receiptData || "TEST_TOKEN";
-        plan = productId.includes("base")
-          ? ("BASE" as PlanType)
-          : ("PRO" as PlanType);
+        plan = getProductPlan(productId);
         validationResult = {
           valid: true,
           status: "active",
@@ -191,6 +190,20 @@ router.post(
 
       if (!plan) {
         res.status(400).json({ error: "Unknown product ID" });
+        return;
+      }
+
+      const existingPurchase = await prisma.purchase.findUnique({
+        where: { purchaseTokenOrTransactionId: tokenOrTxnId },
+      });
+
+      if (existingPurchase && existingPurchase.userId !== userId) {
+        console.warn(
+          `[Billing] Purchase token ${tokenOrTxnId} already claimed by user ${existingPurchase.userId}; rejecting re-submission from ${userId}`,
+        );
+        res.status(409).json({
+          error: "This purchase is already associated with a different account",
+        });
         return;
       }
 
@@ -375,7 +388,7 @@ async function getEntitlementInfo(userId: string) {
   };
 }
 
-async function getUsageInfo(userId: string) {
+export async function getUsageInfo(userId: string) {
   const monthKey = getCurrentMonthKey();
 
   let usage = await prisma.usage.findUnique({
@@ -394,12 +407,15 @@ async function getUsageInfo(userId: string) {
     });
   }
 
-  const totalRecordings = await prisma.recording.count({
+  // maxRecordingsLifetime is a lifetime cap, not per-month, so it's summed
+  // across every monthly Usage row rather than read off the current month.
+  const lifetimeRecordings = await prisma.usage.aggregate({
     where: { userId },
+    _sum: { recordingsCount: true },
   });
 
   return {
-    recordingsCount: totalRecordings,
+    recordingsCount: lifetimeRecordings._sum.recordingsCount || 0,
     transcriptionMinutesUsed: usage.transcriptionMinutesUsed,
     storageBytesUsed: usage.storageBytesUsed,
     monthKey,
@@ -463,7 +479,24 @@ export async function incrementUsage(
   }
 }
 
-const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "studymind-stripe-webhook-secret-2026-default";
+const INTERNAL_API_SECRET = (() => {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[Billing] INTERNAL_API_SECRET env var must be set in production. " +
+        "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+      );
+    }
+    console.warn(
+      "[Billing] INTERNAL_API_SECRET not set — using insecure default for development only.",
+    );
+    return "studymind-dev-only-not-for-production";
+  }
+  return secret;
+})();
+
+const VALID_PLANS = ["FREE", "PLUS", "PRO"] as const;
 
 router.post("/stripe-webhook", async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
@@ -490,6 +523,11 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
 
     if (!email || !plan || !subscriptionId) {
       res.status(400).json({ error: "Missing required fields: email, plan, subscriptionId" });
+      return;
+    }
+
+    if (!VALID_PLANS.includes(plan)) {
+      res.status(400).json({ error: `Invalid plan: ${plan}` });
       return;
     }
 

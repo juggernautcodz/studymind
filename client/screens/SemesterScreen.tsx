@@ -21,7 +21,9 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { LoadingState } from "@/components/LoadingState";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
+import { ensureSemesterOnServer, ensureCourseOnServer } from "@/lib/serverSync";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type { Semester, Course, Topic } from "@/types";
 import { COURSE_COLORS } from "@/types";
@@ -30,6 +32,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 export default function SemesterScreen() {
   const { theme } = useTheme();
   const { showToast } = useToast();
+  const { getAuthToken } = useAuth();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -45,6 +48,11 @@ export default function SemesterScreen() {
   const [deleteCourseTarget, setDeleteCourseTarget] = useState<Course | null>(null);
   const [courseName, setCourseName] = useState("");
   const [courseCode, setCourseCode] = useState("");
+  const [showRenameSemesterSheet, setShowRenameSemesterSheet] = useState(false);
+  const [renameSemesterNameInput, setRenameSemesterNameInput] = useState("");
+  const [showRenameCourseSheet, setShowRenameCourseSheet] = useState(false);
+  const [renameCourseTarget, setRenameCourseTarget] = useState<Course | null>(null);
+  const [renameCourseNameInput, setRenameCourseNameInput] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -72,9 +80,23 @@ export default function SemesterScreen() {
     if (semester) {
       navigation.setOptions({
         headerTitle: semester.name,
+        headerRight: () => (
+          <Pressable
+            onPress={() => {
+              setRenameSemesterNameInput(semester.name);
+              setShowRenameSemesterSheet(true);
+            }}
+            hitSlop={8}
+            style={{ padding: Spacing.xs }}
+            accessibilityLabel="Rename semester"
+            accessibilityRole="button"
+          >
+            <Icon name="edit-2" size={18} color={theme.link} />
+          </Pressable>
+        ),
       });
     }
-  }, [navigation, semester]);
+  }, [navigation, semester, theme.link]);
 
   const getStatsForCourse = (courseId: string) => {
     const courseTopics = topics.filter((t) => t.courseId === courseId);
@@ -126,6 +148,45 @@ export default function SemesterScreen() {
     setShowDeleteSheet(true);
   };
 
+  const handleRenameSemester = async () => {
+    const trimmed = renameSemesterNameInput.trim();
+    if (!trimmed || !semester) return;
+    const updated = await storage.updateSemester(semester.id, { name: trimmed });
+    if (updated) {
+      setSemester(updated);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({ type: "success", title: "Renamed", message: "Semester updated" });
+      const token = await getAuthToken();
+      ensureSemesterOnServer(updated.id, token).catch((err) =>
+        console.warn("[Rename] Failed to sync semester name to server:", err),
+      );
+    }
+    setShowRenameSemesterSheet(false);
+  };
+
+  const openRenameCourse = (course: Course) => {
+    setRenameCourseTarget(course);
+    setRenameCourseNameInput(course.name);
+    setShowRenameCourseSheet(true);
+  };
+
+  const handleRenameCourse = async () => {
+    const trimmed = renameCourseNameInput.trim();
+    if (!trimmed || !renameCourseTarget) return;
+    const updated = await storage.updateCourse(renameCourseTarget.id, { name: trimmed });
+    if (updated) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({ type: "success", title: "Renamed", message: "Course updated" });
+      const token = await getAuthToken();
+      ensureCourseOnServer(updated.id, token).catch((err) =>
+        console.warn("[Rename] Failed to sync course name to server:", err),
+      );
+    }
+    setShowRenameCourseSheet(false);
+    setRenameCourseTarget(null);
+    loadData();
+  };
+
   const confirmDeleteCourse = async () => {
     if (!deleteCourseTarget) return;
     setShowDeleteSheet(false);
@@ -172,6 +233,18 @@ export default function SemesterScreen() {
         onLongPress={() => handleDeleteCourse(item)}
       >
         <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
+        <Pressable
+          onPress={() => openRenameCourse(item)}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.courseEditBtn,
+            { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.5 : 1 },
+          ]}
+          accessibilityLabel={`Rename ${item.name}`}
+          accessibilityRole="button"
+        >
+          <Icon name="edit-2" size={13} color={theme.textSecondary} />
+        </Pressable>
         <View style={styles.cardInner}>
           <View style={styles.cardTop}>
             <View style={[styles.iconContainer, { backgroundColor: accentColor + "20" }]}>
@@ -318,6 +391,53 @@ export default function SemesterScreen() {
       </BottomSheet>
 
       <BottomSheet
+        visible={showRenameSemesterSheet}
+        onClose={() => setShowRenameSemesterSheet(false)}
+        title="Rename Semester"
+      >
+        <Input
+          label="Semester Name"
+          placeholder="e.g., Fall 2026"
+          value={renameSemesterNameInput}
+          onChangeText={setRenameSemesterNameInput}
+          autoFocus
+        />
+        <Button
+          onPress={handleRenameSemester}
+          disabled={!renameSemesterNameInput.trim()}
+          size="lg"
+          fullWidth
+        >
+          Save
+        </Button>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={showRenameCourseSheet}
+        onClose={() => {
+          setShowRenameCourseSheet(false);
+          setRenameCourseTarget(null);
+        }}
+        title="Rename Course"
+      >
+        <Input
+          label="Course Name"
+          placeholder="e.g., Introduction to Computer Science"
+          value={renameCourseNameInput}
+          onChangeText={setRenameCourseNameInput}
+          autoFocus
+        />
+        <Button
+          onPress={handleRenameCourse}
+          disabled={!renameCourseNameInput.trim()}
+          size="lg"
+          fullWidth
+        >
+          Save
+        </Button>
+      </BottomSheet>
+
+      <BottomSheet
         visible={showDeleteSheet}
         onClose={() => { setShowDeleteSheet(false); setDeleteCourseTarget(null); }}
         title="Delete Course?"
@@ -366,6 +486,17 @@ const styles = StyleSheet.create({
   accentBar: {
     height: 4,
     width: "100%",
+  },
+  courseEditBtn: {
+    position: "absolute",
+    top: Spacing.sm + 4,
+    right: Spacing.sm,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
   },
   cardInner: {
     padding: Spacing.md,

@@ -331,6 +331,7 @@ router.post(
   guestOrAuthMiddleware,
   requireAI,
   transcriptionRateLimit,
+  checkUsageLimits("recording"),
   checkUsageLimits("transcription"),
   async (req: AuthRequest, res: Response) => {
     try {
@@ -391,6 +392,11 @@ router.post(
             "transcription",
             durationMinutes,
           );
+          await incrementUsage(
+            req.user?.id ?? ANONYMOUS_USER_ID,
+            "recording",
+            1,
+          );
         } catch (error) {
           console.error("Transcription processing error:", error);
           await prisma.job.update({
@@ -423,6 +429,7 @@ router.post(
   guestOrAuthMiddleware,
   requireAI,
   transcriptionRateLimit,
+  checkUsageLimits("recording"),
   checkUsageLimits("transcription"),
   async (req: AuthRequest, res: Response) => {
     try {
@@ -469,6 +476,7 @@ router.post(
           });
 
           await incrementUsage(userId, "transcription", durationMinutes);
+          await incrementUsage(userId, "recording", 1);
         } catch (error) {
           console.error("Transcription upload processing error:", error);
           await prisma.job.update({

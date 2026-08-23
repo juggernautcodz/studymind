@@ -121,6 +121,24 @@ function generateCorrelationId(): string {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const SENSITIVE_LOG_KEYS = new Set([
+  "token",
+  "password",
+  "passwordHash",
+  "newPassword",
+  "code",
+  "receiptData",
+  "purchaseToken",
+  "transactionId",
+  "rawReceiptJson",
+  "tokenHash",
+]);
+
+function redactSensitiveJson(replacerKey: string, value: unknown): unknown {
+  if (SENSITIVE_LOG_KEYS.has(replacerKey)) return "[REDACTED]";
+  return value;
+}
+
 function setupRequestLogging(app: express.Application) {
   app.use((req, res, next) => {
     const correlationId =
@@ -145,7 +163,7 @@ function setupRequestLogging(app: express.Application) {
 
       let logLine = `[${correlationId}] ${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse, redactSensitiveJson)}`;
       }
 
       if (logLine.length > 120) {
@@ -240,6 +258,14 @@ function configureExpoAndLanding(app: express.Application) {
     path.resolve(process.cwd(), "server", "templates", "privacy-policy.html"),
   );
 
+  const termsOfServiceTemplate = loadTemplate(
+    path.resolve(process.cwd(), "server", "templates", "terms-of-service.html"),
+  );
+
+  const helpSupportTemplate = loadTemplate(
+    path.resolve(process.cwd(), "server", "templates", "help-support.html"),
+  );
+
   const appName = getAppName();
 
   const distDir = path.resolve(process.cwd(), "dist");
@@ -282,6 +308,18 @@ function configureExpoAndLanding(app: express.Application) {
       return res.status(200).send(privacyPolicyTemplate);
     }
 
+    if (req.path === "/terms" || req.path === "/terms-of-service") {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(termsOfServiceTemplate);
+    }
+
+    if (req.path === "/help" || req.path === "/support") {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(helpSupportTemplate);
+    }
+
     if (req.path === "/robots.txt") {
       const forwardedProto = req.header("x-forwarded-proto") || req.protocol || "https";
       const host = req.header("x-forwarded-host") || req.get("host") || "localhost";
@@ -307,6 +345,16 @@ function configureExpoAndLanding(app: express.Application) {
   </url>
   <url>
     <loc>${baseUrl}/privacy</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/terms</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/help</loc>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>

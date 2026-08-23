@@ -11,7 +11,6 @@
     "server:build": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outfile=server_dist/index.mjs",
     "server:prod": "NODE_ENV=production node server_dist/index.mjs",
     "prod:boot:test": "node scripts/prod-boot-test.cjs",
-    "db:push": "drizzle-kit push",
     "lint": "npx expo lint",
     "lint:fix": "npx expo lint --fix",
     "check:types": "tsc --noEmit",
@@ -33,7 +32,6 @@
   "dependencies": {
     "@expo/ngrok": "^4.1.3",
     "@expo/vector-icons": "^15.0.3",
-    "@prisma/adapter-better-sqlite3": "^7.3.0",
     "@prisma/client": "^7.3.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "^8.6.0",
@@ -52,11 +50,7 @@
     "babel-plugin-module-resolver": "^5.0.2",
     "babel-preset-expo": "~55.0.5",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.6.2",
     "dotenv": "^17.3.1",
-    "drizzle-kit": "^0.31.7",
-    "drizzle-orm": "^0.39.3",
-    "drizzle-zod": "^0.7.1",
     "esbuild": "^0.25.12",
     "eslint": "^9.39.1",
     "eslint-config-expo": "~55.0.0",
@@ -64,6 +58,7 @@
     "expo-asset": "~55.0.8",
     "expo-audio": "~55.0.14",
     "expo-blur": "~55.0.14",
+    "expo-build-properties": "~55.0.17",
     "expo-clipboard": "~55.0.13",
     "expo-constants": "~55.0.7",
     "expo-device": "~55.0.15",
@@ -118,5 +113,9 @@
   "devDependencies": {
     "prisma": "^7.3.0",
     "react-refresh": "^0.18.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.6.2",
+    "@prisma/adapter-better-sqlite3": "^7.3.0"
   }
 }

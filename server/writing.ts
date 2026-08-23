@@ -18,7 +18,7 @@ const openai = USE_REAL_AI
     })
   : null;
 
-type Plan = "FREE" | "BASE" | "PRO";
+type Plan = "FREE" | "PLUS" | "PRO";
 
 async function getUserPlan(userId: string): Promise<Plan> {
   try {
@@ -27,21 +27,24 @@ async function getUserPlan(userId: string): Promise<Plan> {
     if (ent.expiresAt && ent.expiresAt.getTime() < Date.now()) return "FREE";
     const p = ent.plan.toUpperCase();
     if (p === "PRO") return "PRO";
-    if (p === "BASE") return "BASE";
+    if (p === "PLUS") return "PLUS";
     return "FREE";
   } catch {
     return "FREE";
   }
 }
 
-const REVIEWER_EMAIL = "reviewer@studymindapp.com";
+// Set only for App Store / Google Play reviewer accounts, provisioned out-of-band
+// (never via public signup — see the REVIEWER_EMAIL block in server/auth.ts's
+// /signup handler, which refuses to let this address self-register).
+const REVIEWER_EMAIL = process.env.REVIEWER_EMAIL || "";
 
 function requirePlan(...allowed: Plan[]) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user?.email === REVIEWER_EMAIL) return next();
+    if (REVIEWER_EMAIL && req.user?.email === REVIEWER_EMAIL) return next();
     const plan = await getUserPlan(req.user!.id);
     if (allowed.includes(plan)) return next();
-    const highest = allowed.includes("BASE") ? "BASE" : "PRO";
+    const highest = allowed.includes("PLUS") ? "PLUS" : "PRO";
     return res
       .status(403)
       .json({ type: "PAYWALL_REQUIRED", planRequired: highest });
@@ -80,7 +83,7 @@ function writingRateLimit() {
       return res.status(429).json({ code: "RATE_LIMIT_MINUTE" });
     }
 
-    const isReviewer = req.user?.email === REVIEWER_EMAIL;
+    const isReviewer = !!REVIEWER_EMAIL && req.user?.email === REVIEWER_EMAIL;
     const plan = isReviewer ? "PRO" : await getUserPlan(uid);
     const dayMax = plan === "FREE" ? 5 : 50;
 

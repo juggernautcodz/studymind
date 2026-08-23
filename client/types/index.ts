@@ -1,4 +1,4 @@
-export type Plan = "FREE" | "BASE" | "PRO";
+export type Plan = "FREE" | "PLUS" | "PRO";
 
 export interface User {
   id: string;
@@ -158,7 +158,7 @@ export interface UsageStats {
 
 export const PLAN_LIMITS = {
   FREE: { recordings: 2, transcriptionMinutes: 30 },
-  BASE: { recordings: 20, transcriptionMinutes: 300 },
+  PLUS: { recordings: 999, transcriptionMinutes: 150 },
   PRO: { recordings: 200, transcriptionMinutes: 3000 },
 };
 

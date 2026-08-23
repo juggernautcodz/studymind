@@ -59,7 +59,7 @@ Preferred communication style: Simple, everyday language.
 - **Middleware**: `requireAuth` pattern prepared for server-side routes
 
 ### Billing/Plans (In-App Purchases)
-- **Tiers**: FREE, BASE (lifetime), PRO (subscription)
+- **Tiers**: FREE, PLUS (subscription), PRO (subscription)
 - **Payment Method**: Platform-native IAP (iOS App Store / Google Play) - NO Stripe in mobile apps
 - **Backend**: Receipt validation with stubs for development (`TEST_RECEIPT`, `TEST_TOKEN`)
 - **Models**: SubscriptionStatus, Purchase, Entitlement, Usage (Prisma/SQLite)

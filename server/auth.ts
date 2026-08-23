@@ -123,12 +123,6 @@ export const guestOrAuthMiddleware = async (
     email: "guest@studymind.app",
   };
 
-  const deviceUser = req.headers["x-device-user"] as string | undefined;
-  if (deviceUser) {
-    req.user = { id: deviceUser, email: "device@studymind.app" };
-    return next();
-  }
-
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     req.user = guestUser;
     return next();
@@ -172,7 +166,8 @@ export const guestOrAuthMiddleware = async (
 
 router.post("/signup", signupRateLimit, async (req: Request, res: Response) => {
   try {
-    const { email, password, name } = req.body;
+    const { password, name } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.toLowerCase() : req.body.email;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
@@ -180,6 +175,13 @@ router.post("/signup", signupRateLimit, async (req: Request, res: Response) => {
 
     if (password.length < 8) {
       return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    const reviewerEmail = process.env.REVIEWER_EMAIL;
+    if (reviewerEmail && email === reviewerEmail.toLowerCase()) {
+      // Reviewer accounts are provisioned out-of-band, never via public signup —
+      // return the same error a normal duplicate-email signup would get.
+      return res.status(400).json({ error: "Email already registered" });
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -236,7 +238,8 @@ router.post("/signup", signupRateLimit, async (req: Request, res: Response) => {
 
 router.post("/login", loginRateLimit, async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.toLowerCase() : req.body.email;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
@@ -460,6 +463,11 @@ router.get(
 async function sendPasswordResetEmail(email: string, code: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[Auth] RESEND_API_KEY env var must be set in production — refusing to log reset codes to server logs.",
+      );
+    }
     console.log(`[Auth] Password reset code for ${email}: ${code}`);
     return;
   }

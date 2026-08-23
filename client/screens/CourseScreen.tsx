@@ -41,7 +41,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
-import { createTopicWithServerSync } from "@/lib/serverSync";
+import { createTopicWithServerSync, syncTopicToServer, ensureCourseOnServer } from "@/lib/serverSync";
 import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type {
@@ -87,6 +87,11 @@ export default function CourseScreen() {
   const [uploadingLabel, setUploadingLabel] = useState("Processing...");
   const [showDeleteTopicSheet, setShowDeleteTopicSheet] = useState(false);
   const [deleteTopicTarget, setDeleteTopicTarget] = useState<Topic | null>(null);
+  const [showRenameCourseSheet, setShowRenameCourseSheet] = useState(false);
+  const [renameCourseNameInput, setRenameCourseNameInput] = useState("");
+  const [showRenameTopicSheet, setShowRenameTopicSheet] = useState(false);
+  const [renameTopicTarget, setRenameTopicTarget] = useState<Topic | null>(null);
+  const [renameTopicNameInput, setRenameTopicNameInput] = useState("");
   const [showDestinationSheet, setShowDestinationSheet] = useState(false);
   const [pendingContent, setPendingContent] = useState<{
     text: string;
@@ -140,9 +145,23 @@ export default function CourseScreen() {
     if (course) {
       navigation.setOptions({
         headerTitle: course.name,
+        headerRight: () => (
+          <Pressable
+            onPress={() => {
+              setRenameCourseNameInput(course.name);
+              setShowRenameCourseSheet(true);
+            }}
+            hitSlop={8}
+            style={{ padding: Spacing.xs }}
+            accessibilityLabel="Rename course"
+            accessibilityRole="button"
+          >
+            <Icon name="edit-2" size={18} color={theme.link} />
+          </Pressable>
+        ),
       });
     }
-  }, [navigation, course]);
+  }, [navigation, course, theme.link]);
 
   const ensureTopicForCourse = async (): Promise<string | null> => {
     if (topics.length > 0) return topics[0].id;
@@ -730,6 +749,48 @@ export default function CourseScreen() {
     setShowDeleteTopicSheet(true);
   };
 
+  const handleRenameCourse = async () => {
+    const trimmed = renameCourseNameInput.trim();
+    if (!trimmed || !course) return;
+    const updated = await storage.updateCourse(course.id, { name: trimmed });
+    if (updated) {
+      setCourse(updated);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({ type: "success", title: "Renamed", message: "Course updated" });
+      const token = await getAuthToken();
+      ensureCourseOnServer(updated.id, token).catch((err) =>
+        console.warn("[Rename] Failed to sync course name to server:", err),
+      );
+    }
+    setShowRenameCourseSheet(false);
+  };
+
+  const openRenameTopic = (topic: Topic) => {
+    setRenameTopicTarget(topic);
+    setRenameTopicNameInput(topic.name);
+    setShowRenameTopicSheet(true);
+  };
+
+  const handleRenameTopic = async () => {
+    const trimmed = renameTopicNameInput.trim();
+    if (!trimmed || !renameTopicTarget) return;
+    const updated = await storage.updateTopic(renameTopicTarget.id, { name: trimmed });
+    if (updated) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({ type: "success", title: "Renamed", message: "Topic updated" });
+      const token = await getAuthToken();
+      syncTopicToServer(
+        { id: updated.id, name: updated.name, courseId: updated.courseId },
+        token,
+      ).catch((err) =>
+        console.warn("[Rename] Failed to sync topic name to server:", err),
+      );
+    }
+    setShowRenameTopicSheet(false);
+    setRenameTopicTarget(null);
+    loadData();
+  };
+
   const confirmDeleteTopic = async () => {
     if (!deleteTopicTarget) return;
     setShowDeleteTopicSheet(false);
@@ -835,10 +896,22 @@ export default function CourseScreen() {
           onPress={() =>
             navigation.navigate("Topic", { topicId: item.id, courseId })
           }
-          onLongPress={() => handleDeleteTopic(item)}
+          onLongPress={() => openRenameTopic(item)}
           style={styles.topicRowItem}
         />
       </View>
+      <Pressable
+        onPress={() => openRenameTopic(item)}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.topicDeleteBtn,
+          { opacity: pressed ? 0.5 : 1 },
+        ]}
+        accessibilityLabel={`Rename ${item.name}`}
+        accessibilityRole="button"
+      >
+        <Icon name="edit-2" size={18} color={theme.link} />
+      </Pressable>
       <Pressable
         onPress={() => handleDeleteTopic(item)}
         hitSlop={8}
@@ -1115,6 +1188,53 @@ export default function CourseScreen() {
           fullWidth
         >
           Create Topic
+        </Button>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={showRenameCourseSheet}
+        onClose={() => setShowRenameCourseSheet(false)}
+        title="Rename Course"
+      >
+        <Input
+          label="Course Name"
+          placeholder="e.g., Introduction to Computer Science"
+          value={renameCourseNameInput}
+          onChangeText={setRenameCourseNameInput}
+          autoFocus
+        />
+        <Button
+          onPress={handleRenameCourse}
+          disabled={!renameCourseNameInput.trim()}
+          size="lg"
+          fullWidth
+        >
+          Save
+        </Button>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={showRenameTopicSheet}
+        onClose={() => {
+          setShowRenameTopicSheet(false);
+          setRenameTopicTarget(null);
+        }}
+        title="Rename Topic"
+      >
+        <Input
+          label="Topic Name"
+          placeholder="e.g., Introduction, Data Structures"
+          value={renameTopicNameInput}
+          onChangeText={setRenameTopicNameInput}
+          autoFocus
+        />
+        <Button
+          onPress={handleRenameTopic}
+          disabled={!renameTopicNameInput.trim()}
+          size="lg"
+          fullWidth
+        >
+          Save
         </Button>
       </BottomSheet>
 

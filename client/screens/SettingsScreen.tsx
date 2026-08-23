@@ -79,8 +79,12 @@ export default function SettingsScreen() {
 
   const confirmLogout = async () => {
     setShowLogoutSheet(false);
-    await logout();
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await logout();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      showToast({ type: "error", title: "Logout failed", message: "Please try again" });
+    }
   };
 
   const handleClearData = () => {
@@ -89,9 +93,13 @@ export default function SettingsScreen() {
 
   const confirmClearData = async () => {
     setShowClearDataSheet(false);
-    await storage.clearAll();
-    await logout();
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await storage.clearAll();
+      await logout();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      showToast({ type: "error", title: "Clear data failed", message: "Please try again" });
+    }
   };
 
   const handleExportNotes = async () => {
@@ -163,8 +171,17 @@ export default function SettingsScreen() {
 
   const confirmDeleteAccountStep2 = async () => {
     setShowDeleteAccountConfirmSheet(false);
-    await deleteAccount();
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await deleteAccount();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast({
+        type: "error",
+        title: "Delete account failed",
+        message: "Your account was not deleted. Please try again.",
+      });
+    }
   };
 
   const planLimits = user ? PLAN_LIMITS[user.plan] : PLAN_LIMITS.FREE;
@@ -178,7 +195,7 @@ export default function SettingsScreen() {
     switch (user?.plan) {
       case "PRO":
         return theme.success;
-      case "BASE":
+      case "PLUS":
         return theme.info;
       default:
         return theme.textSecondary;
@@ -189,7 +206,7 @@ export default function SettingsScreen() {
     switch (user?.plan) {
       case "PRO":
         return "success";
-      case "BASE":
+      case "PLUS":
         return "info";
       default:
         return "default";
