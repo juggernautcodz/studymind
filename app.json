@@ -56,7 +56,7 @@
       "expo-image",
       "expo-localization",
       "expo-sharing",
-      "react-native-iap",
+      "./plugins/withIAPStoreDimension.js",
       "./plugins/withEdgeToEdgeStyles.js",
       [
         "expo-build-properties",
