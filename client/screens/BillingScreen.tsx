@@ -10,15 +10,12 @@ import {
 import {
   initConnection,
   endConnection,
-  getProducts,
-  getSubscriptions,
+  fetchProducts,
   requestPurchase,
-  requestSubscription,
   purchaseUpdatedListener,
   purchaseErrorListener,
   finishTransaction,
   getAvailablePurchases,
-  PurchaseStateAndroid,
   type Purchase,
 } from "react-native-iap";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -137,9 +134,9 @@ export default function BillingScreen() {
 
         // Only register listeners after a successful connection.
         purchaseListener = purchaseUpdatedListener(async (purchase: Purchase) => {
-          const androidState = (purchase as any).purchaseStateAndroid;
           const purchased =
-            androidState == null || androidState === PurchaseStateAndroid.PURCHASED;
+            purchase.purchaseState === 'purchased' ||
+            purchase.purchaseState == null;
           if (!purchased) return;
           await processPurchase(purchase);
         });
@@ -157,41 +154,34 @@ export default function BillingScreen() {
         });
 
         const [subsResult, prodsResult] = await Promise.allSettled([
-          getSubscriptions({ skus: SUBSCRIPTION_SKUS }),
-          PRODUCT_SKUS.length > 0
-            ? getProducts({ skus: PRODUCT_SKUS })
-            : Promise.resolve([] as any[]),
+          (fetchProducts as any)({ skus: SUBSCRIPTION_SKUS, type: 'subs' }),
+          (fetchProducts as any)({ skus: PRODUCT_SKUS, type: 'in-app' }),
         ]);
 
         const prices: Record<string, string> = {};
         const offerTokens: Record<string, string> = {};
         if (subsResult.status === "fulfilled") {
-          for (const s of subsResult.value as any[]) {
-            // react-native-iap v12's Android Billing v5 shape: a subscription's
-            // price and offerToken live under subscriptionOfferDetails, not on
-            // the subscription object itself. Every base plan/offer requires an
-            // explicit offerToken passed to requestSubscription(), or Google
-            // Play's native purchase UI can't resolve a proper title for the
-            // offer and falls back to showing the raw base plan ID (e.g.
-            // "plus-monthly-base") instead of the subscription's display name.
-            const offer = s.subscriptionOfferDetails?.[0];
-            if (offer?.offerToken) {
-              offerTokens[s.productId] = offer.offerToken;
+          for (const s of subsResult.value) {
+            if ((s as any).localizedPrice) {
+              prices[s.productId] = (s as any).localizedPrice;
             }
-            // Last pricing phase is the ongoing recurring price (any trial/
-            // intro phase, if present, comes first in the list).
-            const phase = offer?.pricingPhases?.pricingPhaseList?.slice(-1)[0];
-            if (phase?.formattedPrice) {
-              prices[s.productId] = phase.formattedPrice;
-            } else if (s.localizedPrice) {
-              prices[s.productId] = s.localizedPrice;
+            // Android subscriptions with multiple base plans/offers need an
+            // explicit offerToken passed to requestPurchase(), or Google Play's
+            // native purchase UI can't resolve a proper title for the offer and
+            // falls back to showing the raw base plan ID (e.g. "plus-monthly-base")
+            // instead of the subscription's configured display name.
+            const offerToken =
+              (s as any).subscriptionOffers?.[0]?.offerTokenAndroid ||
+              (s as any).subscriptionOfferDetailsAndroid?.[0]?.offerToken;
+            if (offerToken) {
+              offerTokens[s.productId] = offerToken;
             }
           }
         }
         if (prodsResult.status === "fulfilled") {
-          for (const p of prodsResult.value as any[]) {
-            if (p.localizedPrice) {
-              prices[p.productId] = p.localizedPrice;
+          for (const p of prodsResult.value) {
+            if ((p as any).localizedPrice) {
+              prices[p.productId] = (p as any).localizedPrice;
             }
           }
         }
@@ -307,26 +297,19 @@ export default function BillingScreen() {
     setPurchasing(product.id);
 
     try {
-      if (product.type === "subscription") {
-        const offerToken = androidOfferTokensRef.current[product.id];
-        if (Platform.OS === "android" && !offerToken) {
-          // Android subscriptions require an offerToken (Billing v5) — if we
-          // don't have one, native product/offer data never loaded correctly,
-          // so there's nothing valid to purchase against yet.
-          throw new Error(
-            "This plan isn't available for purchase right now. Please try again in a moment.",
-          );
-        }
-        await requestSubscription(
-          Platform.OS === "ios"
-            ? { sku: product.id }
-            : { subscriptionOffers: [{ sku: product.id, offerToken: offerToken! }] },
-        );
-      } else {
-        await requestPurchase(
-          Platform.OS === "ios" ? { sku: product.id } : { skus: [product.id] },
-        );
-      }
+      const offerToken = androidOfferTokensRef.current[product.id];
+      await requestPurchase({
+        request: {
+          google: {
+            skus: [product.id],
+            ...(product.type === "subscription" && offerToken
+              ? { subscriptionOffers: [{ sku: product.id, offerToken }] }
+              : {}),
+          },
+          apple: { sku: product.id },
+        },
+        type: product.type === "subscription" ? 'subs' : 'in-app',
+      });
       // Purchase result handled in purchaseUpdatedListener. As a safety net,
       // if the listener never fires (e.g. the app was backgrounded during
       // the native purchase UI, or it raced initConnection), clear the

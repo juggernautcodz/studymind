@@ -56,7 +56,6 @@
       "expo-image",
       "expo-localization",
       "expo-sharing",
-      "./plugins/withIAPStoreDimension.js",
       "./plugins/withEdgeToEdgeStyles.js",
       [
         "expo-build-properties",
