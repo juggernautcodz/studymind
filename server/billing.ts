@@ -14,6 +14,7 @@ import {
   PLAN_LIMITS,
   getPlanLimits,
   getCurrentMonthKey,
+  getProductPlan,
   PlanType,
 } from "./billing/entitlements";
 
@@ -140,9 +141,7 @@ router.post(
       if (isDevTestToken) {
         tokenOrTxnId =
           purchaseToken || transactionId || receiptData || "TEST_TOKEN";
-        plan = productId.includes("base")
-          ? ("BASE" as PlanType)
-          : ("PRO" as PlanType);
+        plan = getProductPlan(productId);
         validationResult = {
           valid: true,
           status: "active",

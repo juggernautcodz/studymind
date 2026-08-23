@@ -301,17 +301,30 @@ var init_auth = __esm({
         const existingUser = await db_default.user.findUnique({
           where: { email }
         });
+        let user;
         if (existingUser) {
-          return res.status(400).json({ error: "Email already registered" });
-        }
-        const passwordHash = await bcrypt.hash(password, 10);
-        const user = await db_default.user.create({
-          data: {
-            email,
-            passwordHash,
-            name: name || null
+          if (existingUser.passwordHash !== "") {
+            return res.status(400).json({ error: "Email already registered" });
           }
-        });
+          const passwordHash = await bcrypt.hash(password, 10);
+          user = await db_default.user.update({
+            where: { id: existingUser.id },
+            data: {
+              passwordHash,
+              name: name || null
+            }
+          });
+          console.log(`[Auth Signup] Placeholder user ${email} upgraded to fully registered account.`);
+        } else {
+          const passwordHash = await bcrypt.hash(password, 10);
+          user = await db_default.user.create({
+            data: {
+              email,
+              passwordHash,
+              name: name || null
+            }
+          });
+        }
         const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
           expiresIn: "30d"
         });
@@ -920,9 +933,21 @@ var init_iosReceiptValidator = __esm({
   "server/billing/iosReceiptValidator.ts"() {
     "use strict";
     TEST_PRODUCTS = {
+      // Legacy product, retired when the lifetime plan was removed — kept so
+      // existing holders can still restore/verify their past purchase.
       "com.studymind.base.lifetime": {
         isSubscription: false,
         plan: "BASE"
+      },
+      "com.studymind.plus.monthly": {
+        isSubscription: true,
+        plan: "PLUS",
+        durationDays: 30
+      },
+      "com.studymind.plus.yearly": {
+        isSubscription: true,
+        plan: "PLUS",
+        durationDays: 365
       },
       "com.studymind.pro.monthly": {
         isSubscription: true,
@@ -1108,7 +1133,19 @@ var init_androidPurchaseValidator = __esm({
   "server/billing/androidPurchaseValidator.ts"() {
     "use strict";
     PRODUCT_CONFIG = {
+      // Legacy product, retired when the lifetime plan was removed — kept so
+      // existing holders can still restore/verify their past purchase.
       "com.studymind.base.lifetime": { isSubscription: false, plan: "BASE" },
+      "com.studymind.plus.monthly": {
+        isSubscription: true,
+        plan: "PLUS",
+        durationDays: 30
+      },
+      "com.studymind.plus.yearly": {
+        isSubscription: true,
+        plan: "PLUS",
+        durationDays: 365
+      },
       "com.studymind.pro.monthly": {
         isSubscription: true,
         plan: "PRO",
@@ -1127,6 +1164,10 @@ var init_androidPurchaseValidator = __esm({
 function getPlanLimits(plan) {
   return PLAN_LIMITS[plan] || PLAN_LIMITS.FREE;
 }
+function getProductPlan(productId) {
+  const product = PRODUCTS.find((p) => p.id === productId);
+  return product?.plan || null;
+}
 function getCurrentMonthKey() {
   const now = /* @__PURE__ */ new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -1137,9 +1178,9 @@ var init_entitlements = __esm({
     "use strict";
     PLAN_LIMITS = {
       FREE: {
-        maxRecordingsLifetime: 2,
-        maxTranscriptionMinutesPerMonth: 30,
-        hasFlashcards: false,
+        maxRecordingsLifetime: 3,
+        maxTranscriptionMinutesPerMonth: 45,
+        hasFlashcards: true,
         hasNotes: true,
         hasMindMap: false,
         hasQuizzes: false,
@@ -1147,20 +1188,20 @@ var init_entitlements = __esm({
         hasExamMode: false,
         hasExport: false
       },
-      BASE: {
+      PLUS: {
         maxRecordingsLifetime: -1,
-        maxTranscriptionMinutesPerMonth: 60,
+        maxTranscriptionMinutesPerMonth: 150,
         hasFlashcards: true,
         hasNotes: true,
         hasMindMap: true,
-        hasQuizzes: false,
+        hasQuizzes: true,
         hasAdaptiveReview: false,
         hasExamMode: false,
         hasExport: false
       },
       PRO: {
         maxRecordingsLifetime: -1,
-        maxTranscriptionMinutesPerMonth: 300,
+        maxTranscriptionMinutesPerMonth: 450,
         hasFlashcards: true,
         hasNotes: true,
         hasMindMap: true,
@@ -1172,52 +1213,67 @@ var init_entitlements = __esm({
     };
     PRODUCTS = [
       {
-        id: "com.studymind.base.lifetime",
-        name: "StudyMind Base",
-        description: "Lifetime unlock - Mind maps, flashcards, and notes",
-        plan: "BASE",
-        type: "non-consumable",
-        price: "$9.99",
+        id: "com.studymind.plus.monthly",
+        name: "StudyMind Plus Monthly",
+        description: "Unlimited recordings, quizzes, and 150 min/mo transcription",
+        plan: "PLUS",
+        type: "subscription",
+        period: "monthly",
+        price: "$9.99/month",
         features: [
-          "Mind map visualization",
-          "Flashcard generation",
+          "Unlimited recordings",
+          "150 min transcription/month",
           "AI-generated notes",
-          "60 min transcription/month"
+          "Flashcard generation",
+          "Quiz generation"
+        ]
+      },
+      {
+        id: "com.studymind.plus.yearly",
+        name: "StudyMind Plus Yearly",
+        description: "Best value Plus plan - save 50%",
+        plan: "PLUS",
+        type: "subscription",
+        period: "yearly",
+        price: "$59.99/year",
+        features: [
+          "Everything in Plus Monthly",
+          "Save 50% vs monthly",
+          "Unlimited recordings",
+          "150 min transcription/month"
         ]
       },
       {
         id: "com.studymind.pro.monthly",
         name: "StudyMind Pro Monthly",
-        description: "Full access - Quizzes, exam mode, and more",
+        description: "Full access - Exam mode, grade analytics, 450 min/mo",
         plan: "PRO",
         type: "subscription",
         period: "monthly",
-        price: "$4.99/month",
+        price: "$19.99/month",
         features: [
-          "Everything in Base",
-          "Quiz generation",
+          "Everything in Plus",
+          "Exam mode & grade analytics",
           "Adaptive study engine",
-          "Exam mode",
-          "300 min transcription/month",
-          "PDF export"
+          "450 min transcription/month",
+          "PDF export & priority AI speed"
         ]
       },
       {
         id: "com.studymind.pro.yearly",
         name: "StudyMind Pro Yearly",
-        description: "Full access - Best value at 2 months free",
+        description: "Best overall value - save 50%",
         plan: "PRO",
         type: "subscription",
         period: "yearly",
-        price: "$49.99/year",
+        price: "$119.99/year",
         features: [
-          "Everything in Base",
-          "Quiz generation",
+          "Everything in Pro Monthly",
+          "Save 50% vs monthly",
+          "Exam mode & grade analytics",
           "Adaptive study engine",
-          "Exam mode",
-          "300 min transcription/month",
-          "PDF export",
-          "2 months free vs monthly"
+          "450 min transcription/month",
+          "PDF export & priority AI speed"
         ]
       }
     ];
@@ -1358,7 +1414,7 @@ function sanitizeError(error) {
   const msg = error?.message || String(error);
   return msg.replace(/postgres:\/\/[^\s]+/gi, "postgres://***").replace(/Bearer\s+\S+/gi, "Bearer ***").replace(/token[=:]\s*\S+/gi, "token=***");
 }
-var router3, billing_default;
+var router3, INTERNAL_API_SECRET, billing_default;
 var init_billing = __esm({
   "server/billing.ts"() {
     "use strict";
@@ -1397,41 +1453,41 @@ var init_billing = __esm({
               price: 0,
               description: "Get started with basic features",
               features: [
-                "2 recordings lifetime",
-                "30 minutes transcription",
-                "Basic notes"
+                "3 recordings total",
+                "45 minutes transcription",
+                "AI notes & flashcards"
               ],
               limits: PLAN_LIMITS.FREE
             },
             {
-              id: "BASE",
-              name: "StudyMind Base",
+              id: "PLUS",
+              name: "StudyMind Plus",
               price: 9.99,
-              type: "lifetime",
-              description: "One-time purchase - Mind maps, flashcards, and notes",
+              type: "subscription",
+              period: "monthly",
+              description: "Unlimited recordings, quizzes, and 150 min/mo transcription",
               features: [
-                "Mind map visualization",
-                "Flashcard generation",
-                "AI-generated notes",
-                "60 min transcription/month"
+                "Unlimited recordings",
+                "150 min transcription/month",
+                "Quiz generation",
+                "Full web + mobile access"
               ],
-              limits: PLAN_LIMITS.BASE,
-              productId: "com.studymind.base.lifetime"
+              limits: PLAN_LIMITS.PLUS,
+              productId: "com.studymind.plus.monthly"
             },
             {
               id: "PRO",
               name: "StudyMind Pro",
-              price: 4.99,
+              price: 19.99,
               type: "subscription",
               period: "monthly",
-              description: "Full access - Quizzes, exam mode, and more",
+              description: "Full access - Exam mode, adaptive study engine, 450 min/mo",
               features: [
-                "Everything in Base",
-                "Quiz generation",
+                "Everything in Plus",
+                "Exam mode & grade analytics",
                 "Adaptive study engine",
-                "Exam mode",
-                "300 min transcription/month",
-                "PDF export"
+                "450 min transcription/month",
+                "PDF export & priority AI speed"
               ],
               limits: PLAN_LIMITS.PRO,
               productId: "com.studymind.pro.monthly"
@@ -1465,7 +1521,7 @@ var init_billing = __esm({
           let tokenOrTxnId;
           if (isDevTestToken) {
             tokenOrTxnId = purchaseToken || transactionId || receiptData || "TEST_TOKEN";
-            plan = productId.includes("base") ? "BASE" : "PRO";
+            plan = getProductPlan(productId);
             validationResult = {
               valid: true,
               status: "active",
@@ -1646,6 +1702,95 @@ var init_billing = __esm({
         }
       }
     );
+    INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "studymind-stripe-webhook-secret-2026-default";
+    router3.post("/stripe-webhook", async (req, res) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        res.status(401).json({ error: "Missing or invalid authorization header" });
+        return;
+      }
+      const token = authHeader.substring(7);
+      if (token !== INTERNAL_API_SECRET) {
+        res.status(403).json({ error: "Forbidden: Invalid API secret" });
+        return;
+      }
+      try {
+        const { email, plan, expiresAt, subscriptionId, priceId, status } = req.body;
+        if (!email || !plan || !subscriptionId) {
+          res.status(400).json({ error: "Missing required fields: email, plan, subscriptionId" });
+          return;
+        }
+        const lowerEmail = email.toLowerCase();
+        let user = await db_default.user.findUnique({
+          where: { email: lowerEmail }
+        });
+        if (!user) {
+          console.log(`[Stripe Sync] Creating placeholder account for new user: ${lowerEmail}`);
+          user = await db_default.user.create({
+            data: {
+              email: lowerEmail,
+              passwordHash: ""
+              // Placeholder - will complete registration via signup endpoint
+            }
+          });
+        }
+        const parsedExpiresAt = expiresAt ? new Date(expiresAt) : null;
+        await db_default.entitlement.upsert({
+          where: { userId: user.id },
+          create: {
+            userId: user.id,
+            plan,
+            expiresAt: parsedExpiresAt,
+            source: "stripe"
+          },
+          update: {
+            plan,
+            expiresAt: parsedExpiresAt,
+            source: "stripe"
+          }
+        });
+        await db_default.subscriptionStatus.upsert({
+          where: { userId: user.id },
+          create: {
+            userId: user.id,
+            platform: "stripe",
+            status,
+            productId: priceId,
+            currentPeriodEnd: parsedExpiresAt
+          },
+          update: {
+            platform: "stripe",
+            status,
+            productId: priceId,
+            currentPeriodEnd: parsedExpiresAt
+          }
+        });
+        await db_default.purchase.upsert({
+          where: { purchaseTokenOrTransactionId: subscriptionId },
+          create: {
+            userId: user.id,
+            platform: "stripe",
+            productId: priceId,
+            purchaseTokenOrTransactionId: subscriptionId,
+            rawReceiptJson: JSON.stringify({ email, plan, status, priceId }),
+            verifiedAt: /* @__PURE__ */ new Date()
+          },
+          update: {
+            verifiedAt: /* @__PURE__ */ new Date()
+          }
+        });
+        console.log(`[Stripe Sync] Successfully updated plan to ${plan} for ${lowerEmail} (Status: ${status})`);
+        res.json({
+          success: true,
+          userId: user.id,
+          plan,
+          status
+        });
+      } catch (error) {
+        console.error("[Stripe Sync] Error updating subscription:", error);
+        res.status(500).json({ error: "Failed to update subscription in backend database" });
+      }
+    });
     billing_default = router3;
   }
 });
@@ -4420,14 +4565,196 @@ var init_search = __esm({
   }
 });
 
+// server/lib/sync.ts
+async function exportUserData(userId, since) {
+  const sinceFilter = since ? { updatedAt: { gte: since } } : {};
+  const [semesters, courses, topics, flashcards, flashcardStats, quizAttempts, recordings] = await Promise.all([
+    // Semesters
+    db_default.semester.findMany({
+      where: { userId, ...sinceFilter },
+      orderBy: { startDate: "desc" }
+    }),
+    // Courses
+    db_default.course.findMany({
+      where: { userId, ...sinceFilter },
+      orderBy: { createdAt: "desc" }
+    }),
+    // Topics (with transcript + notes — the core content)
+    db_default.topic.findMany({
+      where: { userId, ...sinceFilter },
+      orderBy: [{ courseId: "asc" }, { orderIndex: "asc" }],
+      select: {
+        id: true,
+        userId: true,
+        courseId: true,
+        name: true,
+        orderIndex: true,
+        transcript: true,
+        notes: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    }),
+    // Flashcards
+    db_default.flashcard.findMany({
+      where: {
+        topic: { userId },
+        ...since ? { updatedAt: { gte: since } } : {}
+      },
+      orderBy: [{ topicId: "asc" }, { orderIndex: "asc" }]
+    }),
+    // Flashcard study stats (for spaced repetition)
+    db_default.flashcardStat.findMany({
+      where: { userId, ...since ? { updatedAt: { gte: since } } : {} }
+    }),
+    // Quiz attempts
+    db_default.quizAttempt.findMany({
+      where: { userId, ...since ? { completedAt: { gte: since } } : {} },
+      orderBy: { completedAt: "desc" },
+      take: 200
+    }),
+    // Recordings metadata (not the audio file — just the record)
+    db_default.recording.findMany({
+      where: { userId, ...since ? { createdAt: { gte: since } } : {} },
+      select: {
+        id: true,
+        topicId: true,
+        filename: true,
+        durationSeconds: true,
+        transcriptStatus: true,
+        createdAt: true
+      }
+    })
+  ]);
+  return {
+    exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    incremental: !!since,
+    since: since?.toISOString() ?? null,
+    data: {
+      semesters,
+      courses,
+      topics,
+      flashcards,
+      flashcardStats,
+      quizAttempts,
+      recordings
+    },
+    counts: {
+      semesters: semesters.length,
+      courses: courses.length,
+      topics: topics.length,
+      flashcards: flashcards.length,
+      recordings: recordings.length
+    }
+  };
+}
+async function exportTopic(topicId, userId) {
+  const topic = await db_default.topic.findFirst({
+    where: { id: topicId, userId },
+    include: {
+      flashcards: {
+        include: { stats: { where: { userId } } },
+        orderBy: { orderIndex: "asc" }
+      },
+      quizzes: {
+        include: { questions: true }
+      },
+      recordings: {
+        select: {
+          id: true,
+          filename: true,
+          durationSeconds: true,
+          transcriptStatus: true,
+          createdAt: true
+        }
+      },
+      whiteboardImages: true
+    }
+  });
+  if (!topic) return null;
+  return {
+    ...topic,
+    flashcards: topic.flashcards.map((fc) => ({
+      ...fc,
+      myStats: fc.stats[0] ?? null
+    }))
+  };
+}
+var init_sync = __esm({
+  "server/lib/sync.ts"() {
+    "use strict";
+    init_db();
+  }
+});
+
+// server/sync.ts
+var sync_exports = {};
+__export(sync_exports, {
+  default: () => sync_default
+});
+import { Router as Router10 } from "express";
+var router10, sync_default;
+var init_sync2 = __esm({
+  "server/sync.ts"() {
+    "use strict";
+    init_auth();
+    init_sync();
+    router10 = Router10();
+    router10.get("/export", authMiddleware, async (req, res) => {
+      try {
+        const userId = req.user.id;
+        const sinceParam = req.query.since;
+        const since = sinceParam ? new Date(sinceParam) : void 0;
+        if (sinceParam && isNaN(since.getTime())) {
+          return res.status(400).json({ error: "Invalid 'since' timestamp. Use ISO 8601 format." });
+        }
+        const data = await exportUserData(userId, since);
+        res.json(data);
+      } catch (err) {
+        console.error("[sync/export] error:", err);
+        res.status(500).json({ error: "Failed to export study data" });
+      }
+    });
+    router10.get("/topic/:id", authMiddleware, async (req, res) => {
+      try {
+        const userId = req.user.id;
+        const topicId = req.params.id;
+        const topic = await exportTopic(topicId, userId);
+        if (!topic) {
+          return res.status(404).json({ error: "Topic not found" });
+        }
+        res.json(topic);
+      } catch (err) {
+        console.error("[sync/topic] error:", err);
+        res.status(500).json({ error: "Failed to load topic" });
+      }
+    });
+    router10.get("/status", authMiddleware, async (req, res) => {
+      try {
+        const userId = req.user.id;
+        const data = await exportUserData(userId);
+        res.json({
+          ok: true,
+          counts: data.counts,
+          exportedAt: data.exportedAt
+        });
+      } catch (err) {
+        res.status(500).json({ error: "Sync status check failed" });
+      }
+    });
+    sync_default = router10;
+  }
+});
+
 // server/index.ts
 import express from "express";
 
 // server/routes.ts
 import { createServer } from "node:http";
-function safeMount(app2, path3, router10, label) {
+function safeMount(app2, path3, router11, label) {
   try {
-    app2.use(path3, router10);
+    app2.use(path3, router11);
     console.log(`  \u2713 Mounted ${label} at ${path3}`);
   } catch (err) {
     console.warn(`  \u2717 Failed to mount ${label} at ${path3}:`, err);
@@ -4501,6 +4828,12 @@ async function registerRoutes(app2) {
     safeMount(app2, "/api", searchRoutes, "search");
   } catch (err) {
     console.warn("Failed to load search routes:", err);
+  }
+  try {
+    const syncRoutes = (await Promise.resolve().then(() => (init_sync2(), sync_exports))).default;
+    safeMount(app2, "/api/sync", syncRoutes, "sync");
+  } catch (err) {
+    console.warn("Failed to load sync routes:", err);
   }
   console.log("Route registration complete.");
   const httpServer = createServer(app2);
@@ -4684,6 +5017,12 @@ function configureExpoAndLanding(app2) {
   const privacyPolicyTemplate = loadTemplate(
     path2.resolve(process.cwd(), "server", "templates", "privacy-policy.html")
   );
+  const termsOfServiceTemplate = loadTemplate(
+    path2.resolve(process.cwd(), "server", "templates", "terms-of-service.html")
+  );
+  const helpSupportTemplate = loadTemplate(
+    path2.resolve(process.cwd(), "server", "templates", "help-support.html")
+  );
   const appName = getAppName();
   const distDir = path2.resolve(process.cwd(), "dist");
   const hasWebBuild = fs2.existsSync(path2.join(distDir, "index.html"));
@@ -4717,6 +5056,16 @@ function configureExpoAndLanding(app2) {
       res.setHeader("Cache-Control", "no-cache");
       return res.status(200).send(privacyPolicyTemplate);
     }
+    if (req.path === "/terms" || req.path === "/terms-of-service") {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(termsOfServiceTemplate);
+    }
+    if (req.path === "/help" || req.path === "/support") {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(helpSupportTemplate);
+    }
     if (req.path === "/robots.txt") {
       const forwardedProto = req.header("x-forwarded-proto") || req.protocol || "https";
       const host = req.header("x-forwarded-host") || req.get("host") || "localhost";
@@ -4744,6 +5093,16 @@ Sitemap: ${forwardedProto}://${host}/sitemap.xml
   </url>
   <url>
     <loc>${baseUrl}/privacy</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/terms</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/help</loc>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>

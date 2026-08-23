@@ -20,7 +20,19 @@ const PRODUCT_CONFIG: Record<
   string,
   { isSubscription: boolean; plan: string; durationDays?: number }
 > = {
+  // Legacy product, retired when the lifetime plan was removed — kept so
+  // existing holders can still restore/verify their past purchase.
   "com.studymind.base.lifetime": { isSubscription: false, plan: "BASE" },
+  "com.studymind.plus.monthly": {
+    isSubscription: true,
+    plan: "PLUS",
+    durationDays: 30,
+  },
+  "com.studymind.plus.yearly": {
+    isSubscription: true,
+    plan: "PLUS",
+    durationDays: 365,
+  },
   "com.studymind.pro.monthly": {
     isSubscription: true,
     plan: "PRO",

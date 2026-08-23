@@ -388,7 +388,7 @@ export default function BillingScreen() {
                 : "one-time"}
             </ThemedText>
             {product.period === "yearly" ? (
-              <Badge label="Save 17%" variant="success" />
+              <Badge label="Save 50%" variant="success" />
             ) : null}
           </View>
         </View>
