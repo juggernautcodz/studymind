@@ -41,7 +41,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
-import { createTopicWithServerSync } from "@/lib/serverSync";
+import { createTopicWithServerSync, syncTopicToServer, ensureCourseOnServer } from "@/lib/serverSync";
 import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type {
@@ -757,6 +757,10 @@ export default function CourseScreen() {
       setCourse(updated);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast({ type: "success", title: "Renamed", message: "Course updated" });
+      const token = await getAuthToken();
+      ensureCourseOnServer(updated.id, token).catch((err) =>
+        console.warn("[Rename] Failed to sync course name to server:", err),
+      );
     }
     setShowRenameCourseSheet(false);
   };
@@ -770,9 +774,18 @@ export default function CourseScreen() {
   const handleRenameTopic = async () => {
     const trimmed = renameTopicNameInput.trim();
     if (!trimmed || !renameTopicTarget) return;
-    await storage.updateTopic(renameTopicTarget.id, { name: trimmed });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    showToast({ type: "success", title: "Renamed", message: "Topic updated" });
+    const updated = await storage.updateTopic(renameTopicTarget.id, { name: trimmed });
+    if (updated) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({ type: "success", title: "Renamed", message: "Topic updated" });
+      const token = await getAuthToken();
+      syncTopicToServer(
+        { id: updated.id, name: updated.name, courseId: updated.courseId },
+        token,
+      ).catch((err) =>
+        console.warn("[Rename] Failed to sync topic name to server:", err),
+      );
+    }
     setShowRenameTopicSheet(false);
     setRenameTopicTarget(null);
     loadData();

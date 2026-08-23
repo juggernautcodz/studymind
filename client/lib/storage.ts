@@ -200,6 +200,18 @@ export const storage = {
         (n) => n.courseId !== courseId,
       ),
     );
+
+    const quizAttempts = await getItems<QuizAttempt>(KEYS.QUIZ_ATTEMPTS);
+    await setItems(
+      KEYS.QUIZ_ATTEMPTS,
+      quizAttempts.filter((a) => a.courseId !== courseId),
+    );
+
+    const examAttempts = await getItems<ExamAttempt>(KEYS.EXAM_ATTEMPTS);
+    await setItems(
+      KEYS.EXAM_ATTEMPTS,
+      examAttempts.filter((a) => a.courseId !== courseId),
+    );
   },
 
   async getTopics(): Promise<Topic[]> {
@@ -316,6 +328,12 @@ export const storage = {
     await setItems(
       KEYS.WHITEBOARD_IMAGES,
       images.filter((i) => i.topicId !== topicId),
+    );
+
+    const quizAttempts = await getItems<QuizAttempt>(KEYS.QUIZ_ATTEMPTS);
+    await setItems(
+      KEYS.QUIZ_ATTEMPTS,
+      quizAttempts.filter((a) => a.topicId !== topicId),
     );
   },
 

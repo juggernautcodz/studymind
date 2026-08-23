@@ -34,6 +34,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBilling } from "@/contexts/BillingContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 
@@ -89,6 +90,7 @@ export default function BillingScreen() {
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation();
   const { user, updateUser } = useAuth();
+  const { verifyPurchase: verifyPurchaseWithContext, refreshEntitlements } = useBilling();
 
   const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -98,6 +100,15 @@ export default function BillingScreen() {
   const [showRestoreSheet, setShowRestoreSheet] = useState(false);
   const [billingAvailable, setBillingAvailable] = useState(true);
   const gpPricesRef = useRef<Record<string, string>>({});
+  const purchaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPurchasingState = () => {
+    if (purchaseTimeoutRef.current) {
+      clearTimeout(purchaseTimeoutRef.current);
+      purchaseTimeoutRef.current = null;
+    }
+    setPurchasing(null);
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -138,7 +149,7 @@ export default function BillingScreen() {
               message: error.message || "Something went wrong.",
             });
           }
-          setPurchasing(null);
+          clearPurchasingState();
         });
 
         const [subsResult, prodsResult] = await Promise.allSettled([
@@ -182,35 +193,51 @@ export default function BillingScreen() {
       purchaseListener?.remove();
       errorListener?.remove();
       endConnection().catch(() => {});
+      if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
     };
   }, []);
 
   const processPurchase = async (purchase: Purchase) => {
     try {
-      const verifyUrl = new URL("/api/billing/verify", getApiUrl());
-      const response = await apiRequest("POST", verifyUrl.toString(), {
-        platform: "android",
-        productId: purchase.productId,
-        purchaseToken: purchase.purchaseToken,
-      });
+      // Delegate to BillingContext.verifyPurchase — it derives the correct
+      // platform from Platform.OS (this screen used to hardcode "android",
+      // which broke iOS verification) and keeps BillingContext's own
+      // entitlement/usage state in sync instead of drifting from it.
+      const success = await verifyPurchaseWithContext(
+        purchase.productId,
+        undefined,
+        purchase.purchaseToken || undefined,
+      );
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Purchase verification failed");
+      if (!success) {
+        throw new Error("Purchase verification failed");
       }
 
-      const result = await response.json();
-
-      await finishTransaction({ purchase, isConsumable: false });
-      await updateUser({ plan: result.entitlement.plan });
-      setEntitlement(result.entitlement);
+      // The purchase is already granted server-side once verify succeeds —
+      // update local state and tell the user now, so a subsequent
+      // finishTransaction failure (network hiccup, store glitch) doesn't
+      // get reported as a purchase failure when it already succeeded.
+      const freshEntitlement = await fetchEntitlements();
+      if (freshEntitlement) {
+        await updateUser({ plan: freshEntitlement.plan as "FREE" | "PLUS" | "PRO" });
+      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast({
         type: "success",
-        title: "Welcome to " + result.entitlement.plan,
+        title: "Welcome to " + (freshEntitlement?.plan || "your new plan"),
         message: "You now have full access to all features!",
       });
+
+      try {
+        await finishTransaction({ purchase, isConsumable: false });
+      } catch (finishError) {
+        console.warn(
+          "[IAP] finishTransaction failed after a successful verify — purchase is still granted:",
+          finishError,
+        );
+      }
+
       navigation.goBack();
     } catch (error: any) {
       console.error("[IAP] processPurchase error:", error);
@@ -221,7 +248,7 @@ export default function BillingScreen() {
         message: error.message || "Something went wrong. Please try again.",
       });
     } finally {
-      setPurchasing(null);
+      clearPurchasingState();
     }
   };
 
@@ -238,14 +265,16 @@ export default function BillingScreen() {
     }
   };
 
-  const fetchEntitlements = async () => {
+  const fetchEntitlements = async (): Promise<Entitlement | null> => {
     try {
       const url = new URL("/api/billing/entitlements", getApiUrl());
       const response = await apiRequest("GET", url.toString());
       const data = await response.json();
       setEntitlement(data.entitlement);
+      return data.entitlement;
     } catch (error) {
       console.log("Failed to fetch entitlements (may not be authenticated)");
+      return null;
     }
   };
 
@@ -261,7 +290,15 @@ export default function BillingScreen() {
         },
         type: product.type === "subscription" ? 'subs' : 'in-app',
       });
-      // Purchase result handled in purchaseUpdatedListener
+      // Purchase result handled in purchaseUpdatedListener. As a safety net,
+      // if the listener never fires (e.g. the app was backgrounded during
+      // the native purchase UI, or it raced initConnection), clear the
+      // spinner after a while so the button doesn't stay stuck forever.
+      if (purchaseTimeoutRef.current) clearTimeout(purchaseTimeoutRef.current);
+      purchaseTimeoutRef.current = setTimeout(() => {
+        purchaseTimeoutRef.current = null;
+        setPurchasing((current) => (current === product.id ? null : current));
+      }, 30000);
     } catch (error: any) {
       if (error.code !== "E_USER_CANCELLED") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -271,7 +308,7 @@ export default function BillingScreen() {
           message: error.message || "Something went wrong. Please try again.",
         });
       }
-      setPurchasing(null);
+      clearPurchasingState();
     }
   };
 
@@ -292,8 +329,12 @@ export default function BillingScreen() {
         await processPurchase(purchase);
       }
     } catch (err: any) {
-      await fetchEntitlements();
-      showToast({ type: "success", title: "Done", message: "Your purchase history has been checked." });
+      console.error("[IAP] confirmRestore error:", err);
+      showToast({
+        type: "error",
+        title: "Restore Failed",
+        message: err?.message || "Could not check your purchase history. Please try again.",
+      });
     }
   };
 

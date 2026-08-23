@@ -23,7 +23,7 @@ async function parseJsonSafe(response: Response) {
   }
 }
 
-async function ensureSemesterOnServer(
+export async function ensureSemesterOnServer(
   semesterId: string,
   authToken: string | null,
 ): Promise<string | null> {
@@ -69,7 +69,7 @@ async function ensureSemesterOnServer(
   }
 }
 
-async function ensureCourseOnServer(
+export async function ensureCourseOnServer(
   courseId: string,
   authToken: string | null,
 ): Promise<string | null> {

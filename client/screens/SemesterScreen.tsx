@@ -21,7 +21,9 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { LoadingState } from "@/components/LoadingState";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
+import { ensureSemesterOnServer, ensureCourseOnServer } from "@/lib/serverSync";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type { Semester, Course, Topic } from "@/types";
 import { COURSE_COLORS } from "@/types";
@@ -30,6 +32,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 export default function SemesterScreen() {
   const { theme } = useTheme();
   const { showToast } = useToast();
+  const { getAuthToken } = useAuth();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -153,6 +156,10 @@ export default function SemesterScreen() {
       setSemester(updated);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast({ type: "success", title: "Renamed", message: "Semester updated" });
+      const token = await getAuthToken();
+      ensureSemesterOnServer(updated.id, token).catch((err) =>
+        console.warn("[Rename] Failed to sync semester name to server:", err),
+      );
     }
     setShowRenameSemesterSheet(false);
   };
@@ -166,9 +173,15 @@ export default function SemesterScreen() {
   const handleRenameCourse = async () => {
     const trimmed = renameCourseNameInput.trim();
     if (!trimmed || !renameCourseTarget) return;
-    await storage.updateCourse(renameCourseTarget.id, { name: trimmed });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    showToast({ type: "success", title: "Renamed", message: "Course updated" });
+    const updated = await storage.updateCourse(renameCourseTarget.id, { name: trimmed });
+    if (updated) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({ type: "success", title: "Renamed", message: "Course updated" });
+      const token = await getAuthToken();
+      ensureCourseOnServer(updated.id, token).catch((err) =>
+        console.warn("[Rename] Failed to sync course name to server:", err),
+      );
+    }
     setShowRenameCourseSheet(false);
     setRenameCourseTarget(null);
     loadData();

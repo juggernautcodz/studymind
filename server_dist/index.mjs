@@ -751,6 +751,13 @@ var init_study = __esm({
               where: { id, userId }
             });
             if (existing) {
+              if (existing.name !== name) {
+                const updated = await db_default.semester.update({
+                  where: { id: existing.id },
+                  data: { name }
+                });
+                return res.json({ semester: updated });
+              }
               return res.json({ semester: existing });
             }
           }
@@ -808,7 +815,16 @@ var init_study = __esm({
           const userId = req.user?.id || ANONYMOUS_USER_ID;
           if (id) {
             const existing = await db_default.course.findFirst({ where: { id, userId } });
-            if (existing) return res.json({ course: existing });
+            if (existing) {
+              if (existing.name !== name) {
+                const updated = await db_default.course.update({
+                  where: { id: existing.id },
+                  data: { name }
+                });
+                return res.json({ course: updated });
+              }
+              return res.json({ course: existing });
+            }
           }
           const course = await db_default.course.create({
             data: {
@@ -860,7 +876,16 @@ var init_study = __esm({
           const userId = req.user?.id || ANONYMOUS_USER_ID;
           if (id) {
             const existing = await db_default.topic.findFirst({ where: { id, userId } });
-            if (existing) return res.json({ topic: existing });
+            if (existing) {
+              if (existing.name !== name) {
+                const updated = await db_default.topic.update({
+                  where: { id: existing.id },
+                  data: { name }
+                });
+                return res.json({ topic: updated });
+              }
+              return res.json({ topic: existing });
+            }
           }
           const maxOrder = await db_default.topic.findFirst({
             where: { courseId },

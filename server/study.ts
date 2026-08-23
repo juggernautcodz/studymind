@@ -160,6 +160,13 @@ router.post(
         });
 
         if (existing) {
+          if (existing.name !== name) {
+            const updated = await prisma.semester.update({
+              where: { id: existing.id },
+              data: { name },
+            });
+            return res.json({ semester: updated });
+          }
           return res.json({ semester: existing });
         }
       }
@@ -233,7 +240,16 @@ router.post(
 
       if (id) {
         const existing = await prisma.course.findFirst({ where: { id, userId } });
-        if (existing) return res.json({ course: existing });
+        if (existing) {
+          if (existing.name !== name) {
+            const updated = await prisma.course.update({
+              where: { id: existing.id },
+              data: { name },
+            });
+            return res.json({ course: updated });
+          }
+          return res.json({ course: existing });
+        }
       }
 
       const course = await prisma.course.create({
@@ -301,7 +317,16 @@ router.post(
 
       if (id) {
         const existing = await prisma.topic.findFirst({ where: { id, userId } });
-        if (existing) return res.json({ topic: existing });
+        if (existing) {
+          if (existing.name !== name) {
+            const updated = await prisma.topic.update({
+              where: { id: existing.id },
+              data: { name },
+            });
+            return res.json({ topic: updated });
+          }
+          return res.json({ topic: existing });
+        }
       }
 
       const maxOrder = await prisma.topic.findFirst({

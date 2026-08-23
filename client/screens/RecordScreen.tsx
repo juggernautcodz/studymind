@@ -38,6 +38,13 @@ type RecordingState =
   | "generating"
   | "completed";
 
+class PaywallRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PaywallRequiredError";
+  }
+}
+
 interface MaterialSelection {
   notes: boolean;
   flashcards: boolean;
@@ -355,10 +362,13 @@ export default function RecordScreen() {
             errorText,
           );
         let errorMessage = "Failed to upload audio";
+        let isPaywall = false;
         try {
           const errorData = JSON.parse(errorText);
-          errorMessage = errorData.error || errorMessage;
+          errorMessage = errorData.message || errorData.error || errorMessage;
+          isPaywall = errorData.type === "PAYWALL_REQUIRED";
         } catch {}
+        if (isPaywall) throw new PaywallRequiredError(errorMessage);
         throw new Error(`${errorMessage} (${uploadRes.status})`);
       }
 
@@ -410,6 +420,15 @@ export default function RecordScreen() {
       if (isMountedRef.current) {
         setState("idle");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        if (error instanceof PaywallRequiredError) {
+          showToast({
+            type: "warning",
+            title: "Upgrade required",
+            message: error.message,
+          });
+          (navigation as any).navigate("Billing");
+          return;
+        }
         const errorMessage =
           error instanceof Error ? error.message : "Please try again";
         showToast({
