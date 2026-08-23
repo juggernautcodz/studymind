@@ -37,7 +37,7 @@ router.get("/export", authMiddleware, async (req: AuthRequest, res: Response) =>
 router.get("/topic/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const topicId = req.params.id;
+    const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const topic = await exportTopic(topicId, userId);
 
     if (!topic) {

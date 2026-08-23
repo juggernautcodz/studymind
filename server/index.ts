@@ -121,6 +121,24 @@ function generateCorrelationId(): string {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const SENSITIVE_LOG_KEYS = new Set([
+  "token",
+  "password",
+  "passwordHash",
+  "newPassword",
+  "code",
+  "receiptData",
+  "purchaseToken",
+  "transactionId",
+  "rawReceiptJson",
+  "tokenHash",
+]);
+
+function redactSensitiveJson(replacerKey: string, value: unknown): unknown {
+  if (SENSITIVE_LOG_KEYS.has(replacerKey)) return "[REDACTED]";
+  return value;
+}
+
 function setupRequestLogging(app: express.Application) {
   app.use((req, res, next) => {
     const correlationId =
@@ -145,7 +163,7 @@ function setupRequestLogging(app: express.Application) {
 
       let logLine = `[${correlationId}] ${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse, redactSensitiveJson)}`;
       }
 
       if (logLine.length > 120) {

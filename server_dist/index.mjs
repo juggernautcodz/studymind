@@ -141,6 +141,11 @@ import jwt from "jsonwebtoken";
 async function sendPasswordResetEmail(email, code) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[Auth] RESEND_API_KEY env var must be set in production \u2014 refusing to log reset codes to server logs."
+      );
+    }
     console.log(`[Auth] Password reset code for ${email}: ${code}`);
     return;
   }
@@ -286,7 +291,8 @@ var init_auth = __esm({
     };
     router.post("/signup", signupRateLimit, async (req, res) => {
       try {
-        const { email, password, name } = req.body;
+        const { password, name } = req.body;
+        const email = typeof req.body.email === "string" ? req.body.email.toLowerCase() : req.body.email;
         if (!email || !password) {
           return res.status(400).json({ error: "Email and password are required" });
         }
@@ -294,7 +300,7 @@ var init_auth = __esm({
           return res.status(400).json({ error: "Password must be at least 8 characters" });
         }
         const reviewerEmail = process.env.REVIEWER_EMAIL;
-        if (reviewerEmail && email.toLowerCase() === reviewerEmail.toLowerCase()) {
+        if (reviewerEmail && email === reviewerEmail.toLowerCase()) {
           return res.status(400).json({ error: "Email already registered" });
         }
         const existingUser = await db_default.user.findUnique({
@@ -342,7 +348,8 @@ var init_auth = __esm({
     });
     router.post("/login", loginRateLimit, async (req, res) => {
       try {
-        const { email, password } = req.body;
+        const { password } = req.body;
+        const email = typeof req.body.email === "string" ? req.body.email.toLowerCase() : req.body.email;
         if (!email || !password) {
           return res.status(400).json({ error: "Email and password are required" });
         }
@@ -4795,7 +4802,7 @@ var init_sync2 = __esm({
     router10.get("/topic/:id", authMiddleware, async (req, res) => {
       try {
         const userId = req.user.id;
-        const topicId = req.params.id;
+        const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const topic = await exportTopic(topicId, userId);
         if (!topic) {
           return res.status(404).json({ error: "Topic not found" });
@@ -5007,6 +5014,22 @@ function setupBodyParsing(app2) {
 function generateCorrelationId() {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
+var SENSITIVE_LOG_KEYS = /* @__PURE__ */ new Set([
+  "token",
+  "password",
+  "passwordHash",
+  "newPassword",
+  "code",
+  "receiptData",
+  "purchaseToken",
+  "transactionId",
+  "rawReceiptJson",
+  "tokenHash"
+]);
+function redactSensitiveJson(replacerKey, value) {
+  if (SENSITIVE_LOG_KEYS.has(replacerKey)) return "[REDACTED]";
+  return value;
+}
 function setupRequestLogging(app2) {
   app2.use((req, res, next) => {
     const correlationId = req.headers["x-correlation-id"] || generateCorrelationId();
@@ -5025,7 +5048,7 @@ function setupRequestLogging(app2) {
       const duration = Date.now() - start;
       let logLine = `[${correlationId}] ${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse, redactSensitiveJson)}`;
       }
       if (logLine.length > 120) {
         logLine = logLine.slice(0, 119) + "\u2026";

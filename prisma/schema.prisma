@@ -146,6 +146,7 @@ model Recording {
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([topicId])
+  @@index([userId])
 }
 
 model Flashcard {
