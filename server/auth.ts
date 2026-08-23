@@ -123,12 +123,6 @@ export const guestOrAuthMiddleware = async (
     email: "guest@studymind.app",
   };
 
-  const deviceUser = req.headers["x-device-user"] as string | undefined;
-  if (deviceUser) {
-    req.user = { id: deviceUser, email: "device@studymind.app" };
-    return next();
-  }
-
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     req.user = guestUser;
     return next();
@@ -180,6 +174,13 @@ router.post("/signup", signupRateLimit, async (req: Request, res: Response) => {
 
     if (password.length < 8) {
       return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    const reviewerEmail = process.env.REVIEWER_EMAIL;
+    if (reviewerEmail && email.toLowerCase() === reviewerEmail.toLowerCase()) {
+      // Reviewer accounts are provisioned out-of-band, never via public signup —
+      // return the same error a normal duplicate-email signup would get.
+      return res.status(400).json({ error: "Email already registered" });
     }
 
     const existingUser = await prisma.user.findUnique({

@@ -34,11 +34,14 @@ async function getUserPlan(userId: string): Promise<Plan> {
   }
 }
 
-const REVIEWER_EMAIL = "reviewer@studymindapp.com";
+// Set only for App Store / Google Play reviewer accounts, provisioned out-of-band
+// (never via public signup — see the REVIEWER_EMAIL block in server/auth.ts's
+// /signup handler, which refuses to let this address self-register).
+const REVIEWER_EMAIL = process.env.REVIEWER_EMAIL || "";
 
 function requirePlan(...allowed: Plan[]) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user?.email === REVIEWER_EMAIL) return next();
+    if (REVIEWER_EMAIL && req.user?.email === REVIEWER_EMAIL) return next();
     const plan = await getUserPlan(req.user!.id);
     if (allowed.includes(plan)) return next();
     const highest = allowed.includes("PLUS") ? "PLUS" : "PRO";
@@ -80,7 +83,7 @@ function writingRateLimit() {
       return res.status(429).json({ code: "RATE_LIMIT_MINUTE" });
     }
 
-    const isReviewer = req.user?.email === REVIEWER_EMAIL;
+    const isReviewer = !!REVIEWER_EMAIL && req.user?.email === REVIEWER_EMAIL;
     const plan = isReviewer ? "PRO" : await getUserPlan(uid);
     const dayMax = plan === "FREE" ? 5 : 50;
 

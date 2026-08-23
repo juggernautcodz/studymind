@@ -155,8 +155,8 @@ router.post(
       const userId = req.user?.id || ANONYMOUS_USER_ID;
 
       if (id) {
-        const existing = await prisma.semester.findUnique({
-          where: { id },
+        const existing = await prisma.semester.findFirst({
+          where: { id, userId },
         });
 
         if (existing) {
@@ -232,7 +232,7 @@ router.post(
       const userId = req.user?.id || ANONYMOUS_USER_ID;
 
       if (id) {
-        const existing = await prisma.course.findUnique({ where: { id } });
+        const existing = await prisma.course.findFirst({ where: { id, userId } });
         if (existing) return res.json({ course: existing });
       }
 
@@ -300,7 +300,7 @@ router.post(
       const userId = req.user?.id || ANONYMOUS_USER_ID;
 
       if (id) {
-        const existing = await prisma.topic.findUnique({ where: { id } });
+        const existing = await prisma.topic.findFirst({ where: { id, userId } });
         if (existing) return res.json({ topic: existing });
       }
 

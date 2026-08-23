@@ -255,11 +255,6 @@ var init_auth = __esm({
         id: ANONYMOUS_USER_ID,
         email: "guest@studymind.app"
       };
-      const deviceUser = req.headers["x-device-user"];
-      if (deviceUser) {
-        req.user = { id: deviceUser, email: "device@studymind.app" };
-        return next();
-      }
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
         req.user = guestUser;
         return next();
@@ -297,6 +292,10 @@ var init_auth = __esm({
         }
         if (password.length < 8) {
           return res.status(400).json({ error: "Password must be at least 8 characters" });
+        }
+        const reviewerEmail = process.env.REVIEWER_EMAIL;
+        if (reviewerEmail && email.toLowerCase() === reviewerEmail.toLowerCase()) {
+          return res.status(400).json({ error: "Email already registered" });
         }
         const existingUser = await db_default.user.findUnique({
           where: { email }
@@ -741,8 +740,8 @@ var init_study = __esm({
           }
           const userId = req.user?.id || ANONYMOUS_USER_ID;
           if (id) {
-            const existing = await db_default.semester.findUnique({
-              where: { id }
+            const existing = await db_default.semester.findFirst({
+              where: { id, userId }
             });
             if (existing) {
               return res.json({ semester: existing });
@@ -801,7 +800,7 @@ var init_study = __esm({
           }
           const userId = req.user?.id || ANONYMOUS_USER_ID;
           if (id) {
-            const existing = await db_default.course.findUnique({ where: { id } });
+            const existing = await db_default.course.findFirst({ where: { id, userId } });
             if (existing) return res.json({ course: existing });
           }
           const course = await db_default.course.create({
@@ -853,7 +852,7 @@ var init_study = __esm({
           }
           const userId = req.user?.id || ANONYMOUS_USER_ID;
           if (id) {
-            const existing = await db_default.topic.findUnique({ where: { id } });
+            const existing = await db_default.topic.findFirst({ where: { id, userId } });
             if (existing) return res.json({ topic: existing });
           }
           const maxOrder = await db_default.topic.findFirst({
@@ -1414,7 +1413,7 @@ function sanitizeError(error) {
   const msg = error?.message || String(error);
   return msg.replace(/postgres:\/\/[^\s]+/gi, "postgres://***").replace(/Bearer\s+\S+/gi, "Bearer ***").replace(/token[=:]\s*\S+/gi, "token=***");
 }
-var router3, INTERNAL_API_SECRET, billing_default;
+var router3, INTERNAL_API_SECRET, VALID_PLANS, billing_default;
 var init_billing = __esm({
   "server/billing.ts"() {
     "use strict";
@@ -1568,6 +1567,18 @@ var init_billing = __esm({
             res.status(400).json({ error: "Unknown product ID" });
             return;
           }
+          const existingPurchase = await db_default.purchase.findUnique({
+            where: { purchaseTokenOrTransactionId: tokenOrTxnId }
+          });
+          if (existingPurchase && existingPurchase.userId !== userId) {
+            console.warn(
+              `[Billing] Purchase token ${tokenOrTxnId} already claimed by user ${existingPurchase.userId}; rejecting re-submission from ${userId}`
+            );
+            res.status(409).json({
+              error: "This purchase is already associated with a different account"
+            });
+            return;
+          }
           await db_default.user.upsert({
             where: { id: userId },
             create: {
@@ -1702,7 +1713,22 @@ var init_billing = __esm({
         }
       }
     );
-    INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "studymind-stripe-webhook-secret-2026-default";
+    INTERNAL_API_SECRET = (() => {
+      const secret = process.env.INTERNAL_API_SECRET;
+      if (!secret) {
+        if (process.env.NODE_ENV === "production") {
+          throw new Error(
+            `[Billing] INTERNAL_API_SECRET env var must be set in production. Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+          );
+        }
+        console.warn(
+          "[Billing] INTERNAL_API_SECRET not set \u2014 using insecure default for development only."
+        );
+        return "studymind-dev-only-not-for-production";
+      }
+      return secret;
+    })();
+    VALID_PLANS = ["FREE", "PLUS", "PRO"];
     router3.post("/stripe-webhook", async (req, res) => {
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -1718,6 +1744,10 @@ var init_billing = __esm({
         const { email, plan, expiresAt, subscriptionId, priceId, status } = req.body;
         if (!email || !plan || !subscriptionId) {
           res.status(400).json({ error: "Missing required fields: email, plan, subscriptionId" });
+          return;
+        }
+        if (!VALID_PLANS.includes(plan)) {
+          res.status(400).json({ error: `Invalid plan: ${plan}` });
           return;
         }
         const lowerEmail = email.toLowerCase();
@@ -4129,7 +4159,7 @@ function writingRateLimit() {
     if (minRec.count > 2) {
       return res.status(429).json({ code: "RATE_LIMIT_MINUTE" });
     }
-    const isReviewer = req.user?.email === REVIEWER_EMAIL;
+    const isReviewer = !!REVIEWER_EMAIL && req.user?.email === REVIEWER_EMAIL;
     const plan = isReviewer ? "PRO" : await getUserPlan2(uid);
     const dayMax = plan === "FREE" ? 5 : 50;
     const dayKey = `${uid}:day`;
@@ -4182,7 +4212,7 @@ var init_writing = __esm({
       apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
       baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
     }) : null;
-    REVIEWER_EMAIL = "reviewer@studymindapp.com";
+    REVIEWER_EMAIL = process.env.REVIEWER_EMAIL || "";
     minuteBuckets = /* @__PURE__ */ new Map();
     dayBuckets = /* @__PURE__ */ new Map();
     setInterval(() => cleanBuckets(minuteBuckets), 6e4);

@@ -193,6 +193,20 @@ router.post(
         return;
       }
 
+      const existingPurchase = await prisma.purchase.findUnique({
+        where: { purchaseTokenOrTransactionId: tokenOrTxnId },
+      });
+
+      if (existingPurchase && existingPurchase.userId !== userId) {
+        console.warn(
+          `[Billing] Purchase token ${tokenOrTxnId} already claimed by user ${existingPurchase.userId}; rejecting re-submission from ${userId}`,
+        );
+        res.status(409).json({
+          error: "This purchase is already associated with a different account",
+        });
+        return;
+      }
+
       await prisma.user.upsert({
         where: { id: userId },
         create: {
@@ -462,7 +476,24 @@ export async function incrementUsage(
   }
 }
 
-const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || "studymind-stripe-webhook-secret-2026-default";
+const INTERNAL_API_SECRET = (() => {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[Billing] INTERNAL_API_SECRET env var must be set in production. " +
+        "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+      );
+    }
+    console.warn(
+      "[Billing] INTERNAL_API_SECRET not set — using insecure default for development only.",
+    );
+    return "studymind-dev-only-not-for-production";
+  }
+  return secret;
+})();
+
+const VALID_PLANS = ["FREE", "PLUS", "PRO"] as const;
 
 router.post("/stripe-webhook", async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
@@ -489,6 +520,11 @@ router.post("/stripe-webhook", async (req: Request, res: Response) => {
 
     if (!email || !plan || !subscriptionId) {
       res.status(400).json({ error: "Missing required fields: email, plan, subscriptionId" });
+      return;
+    }
+
+    if (!VALID_PLANS.includes(plan)) {
+      res.status(400).json({ error: `Invalid plan: ${plan}` });
       return;
     }
 
