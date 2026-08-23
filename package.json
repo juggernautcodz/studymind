@@ -51,7 +51,6 @@
     "babel-plugin-module-resolver": "^5.0.2",
     "babel-preset-expo": "~55.0.5",
     "bcryptjs": "^3.0.3",
-
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.7",
     "drizzle-orm": "^0.39.3",
@@ -63,6 +62,7 @@
     "expo-asset": "~55.0.8",
     "expo-audio": "~55.0.14",
     "expo-blur": "~55.0.14",
+    "expo-build-properties": "~55.0.17",
     "expo-clipboard": "~55.0.13",
     "expo-constants": "~55.0.7",
     "expo-device": "~55.0.15",

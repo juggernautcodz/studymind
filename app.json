@@ -55,7 +55,17 @@
       "expo-audio",
       "expo-image",
       "expo-localization",
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withEdgeToEdgeStyles.js",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "reactCompiler": false
