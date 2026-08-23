@@ -1,7 +1,7 @@
 import { Response, NextFunction } from "express";
 import prisma from "./db";
 import { AuthRequest } from "./auth";
-import { PLAN_LIMITS } from "./billing";
+import { PLAN_LIMITS, getUsageInfo } from "./billing";
 import { ANONYMOUS_USER_ID } from "./constants";
 
 export const checkUsageLimits = (
@@ -32,6 +32,37 @@ export const checkUsageLimits = (
         PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.FREE;
 
       switch (feature) {
+        case "recording": {
+          if (limits.maxRecordingsLifetime === -1) break;
+          const usage = await getUsageInfo(req.user.id);
+          if (usage.recordingsCount >= limits.maxRecordingsLifetime) {
+            return res.status(403).json({
+              type: "PAYWALL_REQUIRED",
+              error: "Recording limit reached",
+              upgradeRequired: true,
+              message: `You've reached the limit of ${limits.maxRecordingsLifetime} recordings. Upgrade to continue.`,
+            });
+          }
+          break;
+        }
+
+        case "transcription": {
+          if (limits.maxTranscriptionMinutesPerMonth === -1) break;
+          const usage = await getUsageInfo(req.user.id);
+          if (
+            usage.transcriptionMinutesUsed >=
+            limits.maxTranscriptionMinutesPerMonth
+          ) {
+            return res.status(403).json({
+              type: "PAYWALL_REQUIRED",
+              error: "Transcription limit reached",
+              upgradeRequired: true,
+              message: `You've used all ${limits.maxTranscriptionMinutesPerMonth} transcription minutes this month. Upgrade for more.`,
+            });
+          }
+          break;
+        }
+
         case "quiz":
           if (!limits.hasQuizzes) {
             return res.status(403).json({

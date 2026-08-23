@@ -21,8 +21,13 @@ const PRODUCT_CONFIG: Record<
   { isSubscription: boolean; plan: string; durationDays?: number }
 > = {
   // Legacy product, retired when the lifetime plan was removed — kept so
-  // existing holders can still restore/verify their past purchase.
-  "com.studymind.base.lifetime": { isSubscription: false, plan: "BASE" },
+  // existing holders can still restore/verify their past purchase. Mapped to
+  // PLUS (not the old, no-longer-real "BASE" plan) since PLUS is the closest
+  // current equivalent to what BASE lifetime actually unlocked (mind map,
+  // flashcards, notes) — mapping to PRO would over-grant exam mode/adaptive
+  // review/export that these purchasers never paid for. "BASE" is not a
+  // valid PlanType and would silently downgrade holders to FREE.
+  "com.studymind.base.lifetime": { isSubscription: false, plan: "PLUS" },
   "com.studymind.plus.monthly": {
     isSubscription: true,
     plan: "PLUS",

@@ -388,7 +388,7 @@ async function getEntitlementInfo(userId: string) {
   };
 }
 
-async function getUsageInfo(userId: string) {
+export async function getUsageInfo(userId: string) {
   const monthKey = getCurrentMonthKey();
 
   let usage = await prisma.usage.findUnique({
@@ -407,12 +407,15 @@ async function getUsageInfo(userId: string) {
     });
   }
 
-  const totalRecordings = await prisma.recording.count({
+  // maxRecordingsLifetime is a lifetime cap, not per-month, so it's summed
+  // across every monthly Usage row rather than read off the current month.
+  const lifetimeRecordings = await prisma.usage.aggregate({
     where: { userId },
+    _sum: { recordingsCount: true },
   });
 
   return {
-    recordingsCount: totalRecordings,
+    recordingsCount: lifetimeRecordings._sum.recordingsCount || 0,
     transcriptionMinutesUsed: usage.transcriptionMinutesUsed,
     storageBytesUsed: usage.storageBytesUsed,
     monthKey,

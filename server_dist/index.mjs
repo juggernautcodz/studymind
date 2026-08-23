@@ -933,10 +933,15 @@ var init_iosReceiptValidator = __esm({
     "use strict";
     TEST_PRODUCTS = {
       // Legacy product, retired when the lifetime plan was removed — kept so
-      // existing holders can still restore/verify their past purchase.
+      // existing holders can still restore/verify their past purchase. Mapped to
+      // PLUS (not the old, no-longer-real "BASE" plan) since PLUS is the closest
+      // current equivalent to what BASE lifetime actually unlocked (mind map,
+      // flashcards, notes) — mapping to PRO would over-grant exam mode/adaptive
+      // review/export that these purchasers never paid for. "BASE" is not a
+      // valid PlanType and would silently downgrade holders to FREE.
       "com.studymind.base.lifetime": {
         isSubscription: false,
-        plan: "BASE"
+        plan: "PLUS"
       },
       "com.studymind.plus.monthly": {
         isSubscription: true,
@@ -1133,8 +1138,13 @@ var init_androidPurchaseValidator = __esm({
     "use strict";
     PRODUCT_CONFIG = {
       // Legacy product, retired when the lifetime plan was removed — kept so
-      // existing holders can still restore/verify their past purchase.
-      "com.studymind.base.lifetime": { isSubscription: false, plan: "BASE" },
+      // existing holders can still restore/verify their past purchase. Mapped to
+      // PLUS (not the old, no-longer-real "BASE" plan) since PLUS is the closest
+      // current equivalent to what BASE lifetime actually unlocked (mind map,
+      // flashcards, notes) — mapping to PRO would over-grant exam mode/adaptive
+      // review/export that these purchasers never paid for. "BASE" is not a
+      // valid PlanType and would silently downgrade holders to FREE.
+      "com.studymind.base.lifetime": { isSubscription: false, plan: "PLUS" },
       "com.studymind.plus.monthly": {
         isSubscription: true,
         plan: "PLUS",
@@ -1284,6 +1294,7 @@ var billing_exports = {};
 __export(billing_exports, {
   PLAN_LIMITS: () => PLAN_LIMITS,
   default: () => billing_default,
+  getUsageInfo: () => getUsageInfo,
   getUserPlan: () => getUserPlan,
   incrementUsage: () => incrementUsage
 });
@@ -1332,11 +1343,12 @@ async function getUsageInfo(userId) {
       }
     });
   }
-  const totalRecordings = await db_default.recording.count({
-    where: { userId }
+  const lifetimeRecordings = await db_default.usage.aggregate({
+    where: { userId },
+    _sum: { recordingsCount: true }
   });
   return {
-    recordingsCount: totalRecordings,
+    recordingsCount: lifetimeRecordings._sum.recordingsCount || 0,
     transcriptionMinutesUsed: usage.transcriptionMinutesUsed,
     storageBytesUsed: usage.storageBytesUsed,
     monthKey
@@ -1848,6 +1860,32 @@ var init_middleware = __esm({
           const plan = entitlement?.plan || "FREE";
           const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.FREE;
           switch (feature) {
+            case "recording": {
+              if (limits.maxRecordingsLifetime === -1) break;
+              const usage = await getUsageInfo(req.user.id);
+              if (usage.recordingsCount >= limits.maxRecordingsLifetime) {
+                return res.status(403).json({
+                  type: "PAYWALL_REQUIRED",
+                  error: "Recording limit reached",
+                  upgradeRequired: true,
+                  message: `You've reached the limit of ${limits.maxRecordingsLifetime} recordings. Upgrade to continue.`
+                });
+              }
+              break;
+            }
+            case "transcription": {
+              if (limits.maxTranscriptionMinutesPerMonth === -1) break;
+              const usage = await getUsageInfo(req.user.id);
+              if (usage.transcriptionMinutesUsed >= limits.maxTranscriptionMinutesPerMonth) {
+                return res.status(403).json({
+                  type: "PAYWALL_REQUIRED",
+                  error: "Transcription limit reached",
+                  upgradeRequired: true,
+                  message: `You've used all ${limits.maxTranscriptionMinutesPerMonth} transcription minutes this month. Upgrade for more.`
+                });
+              }
+              break;
+            }
             case "quiz":
               if (!limits.hasQuizzes) {
                 return res.status(403).json({
@@ -3179,6 +3217,7 @@ This lecture covered important topics related to the subject matter. The main ta
       guestOrAuthMiddleware,
       requireAI,
       transcriptionRateLimit,
+      checkUsageLimits("recording"),
       checkUsageLimits("transcription"),
       async (req, res) => {
         try {
@@ -3226,6 +3265,11 @@ This lecture covered important topics related to the subject matter. The main ta
                 "transcription",
                 durationMinutes
               );
+              await incrementUsage2(
+                req.user?.id ?? ANONYMOUS_USER_ID,
+                "recording",
+                1
+              );
             } catch (error) {
               console.error("Transcription processing error:", error);
               await db_default.job.update({
@@ -3253,6 +3297,7 @@ This lecture covered important topics related to the subject matter. The main ta
       guestOrAuthMiddleware,
       requireAI,
       transcriptionRateLimit,
+      checkUsageLimits("recording"),
       checkUsageLimits("transcription"),
       async (req, res) => {
         try {
@@ -3288,6 +3333,7 @@ This lecture covered important topics related to the subject matter. The main ta
                 }
               });
               await incrementUsage2(userId, "transcription", durationMinutes);
+              await incrementUsage2(userId, "recording", 1);
             } catch (error) {
               console.error("Transcription upload processing error:", error);
               await db_default.job.update({
