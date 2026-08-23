@@ -25,7 +25,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "package": "com.studymind.app",
-      "versionCode": 15,
+      "versionCode": 16,
       "permissions": [
         "RECORD_AUDIO",
         "CAMERA",
