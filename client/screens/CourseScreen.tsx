@@ -930,7 +930,16 @@ export default function CourseScreen() {
   const renderTopicsTab = () => {
     if (topics.length === 0) {
       return (
-        <View style={styles.emptyTabContainer}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.emptyTabContainer,
+            // Extra clearance below the floating "Mind Map" button
+            // (which sits at insets.bottom + Spacing.xl, ~46px tall) so the
+            // "Add Topic" button never renders underneath it.
+            { paddingBottom: insets.bottom + Spacing["4xl"] + 60 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
           <EmptyState
             image={require("../../assets/images/empty-lectures.png")}
             title="Organize Your Topics"
@@ -938,7 +947,7 @@ export default function CourseScreen() {
             buttonLabel="Add Topic"
             onButtonPress={() => setShowAddTopicSheet(true)}
           />
-        </View>
+        </ScrollView>
       );
     }
 
@@ -1408,7 +1417,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
   },
   emptyTabContainer: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
