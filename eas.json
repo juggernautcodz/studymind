@@ -13,9 +13,12 @@
     },
     "preview": {
       "distribution": "internal",
-      "prebuildCommand": "npx expo prebuild --clean --platform android",
       "android": {
+        "prebuildCommand": "npx expo prebuild --clean --platform android",
         "buildType": "apk"
+      },
+      "ios": {
+        "prebuildCommand": "npx expo prebuild --clean --platform ios"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://asset-manager-landrys424.replit.app"
@@ -23,9 +26,12 @@
     },
     "production": {
       "autoIncrement": true,
-      "prebuildCommand": "npx expo prebuild --clean --platform android",
       "android": {
+        "prebuildCommand": "npx expo prebuild --clean --platform android",
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "prebuildCommand": "npx expo prebuild --clean --platform ios"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://asset-manager-landrys424.replit.app"
