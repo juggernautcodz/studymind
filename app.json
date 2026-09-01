@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.studymind.app",
+      "bundleIdentifier": "com.shanethetester.studymind",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "StudyMind needs microphone access to record your lectures for transcription and study material generation.",
         "NSCameraUsageDescription": "StudyMind needs camera access to capture whiteboard notes, textbook pages, and handwritten notes for OCR text extraction.",
@@ -25,7 +25,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "package": "com.studymind.app",
-      "versionCode": 18,
+      "versionCode": 19,
       "permissions": [
         "RECORD_AUDIO",
         "CAMERA",

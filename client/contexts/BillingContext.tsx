@@ -56,7 +56,7 @@ interface BillingContextType {
   refreshEntitlements: () => Promise<void>;
   verifyPurchase: (
     productId: string,
-    receiptData?: string,
+    transactionId?: string,
     purchaseToken?: string,
   ) => Promise<boolean>;
   isFeatureAvailable: (feature: keyof PlanLimits) => boolean;
@@ -195,7 +195,7 @@ export function BillingProvider({ children }: { children: ReactNode }) {
   const verifyPurchase = useCallback(
     async (
       productId: string,
-      receiptData?: string,
+      transactionId?: string,
       purchaseToken?: string,
     ): Promise<boolean> => {
       try {
@@ -205,7 +205,7 @@ export function BillingProvider({ children }: { children: ReactNode }) {
         const response = await apiRequest("POST", url.toString(), {
           platform,
           productId,
-          receiptData: receiptData || "TEST_RECEIPT",
+          transactionId: transactionId || "TEST_RECEIPT",
           purchaseToken: purchaseToken || "TEST_TOKEN",
         });
 

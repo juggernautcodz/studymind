@@ -156,7 +156,7 @@ router.post(
         }
         tokenOrTxnId = transactionId || receiptData;
         validationResult = await verifyIosReceipt(
-          receiptData || "TEST_RECEIPT",
+          transactionId || receiptData || "TEST_RECEIPT",
           productId,
         );
         plan = getIosProductPlan(productId) as PlanType | null;

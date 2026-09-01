@@ -219,7 +219,7 @@ export default function BillingScreen() {
       // entitlement/usage state in sync instead of drifting from it.
       const success = await verifyPurchaseWithContext(
         purchase.productId,
-        undefined,
+        purchase.transactionId || undefined,
         purchase.purchaseToken || undefined,
       );
 

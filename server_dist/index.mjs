@@ -914,21 +914,103 @@ var init_study = __esm({
 });
 
 // server/billing/iosReceiptValidator.ts
-async function verifyIosReceipt(receiptData, productId) {
+import { readFileSync } from "fs";
+import { resolve } from "path";
+import {
+  AppStoreServerAPIClient,
+  APIException,
+  APIError,
+  Environment,
+  SignedDataVerifier
+} from "@apple/app-store-server-library";
+function isSubscriptionProduct(productId) {
+  const config = TEST_PRODUCTS[productId];
+  if (config) return config.isSubscription;
+  return productId.includes(".monthly") || productId.includes(".yearly");
+}
+function invalidResult(error) {
+  return {
+    valid: false,
+    productId: null,
+    expiresAt: null,
+    status: "invalid",
+    originalTransactionId: null,
+    isSubscription: false,
+    error
+  };
+}
+function getRootCA() {
+  if (!cachedRootCA) {
+    cachedRootCA = readFileSync(APPLE_ROOT_CA_PATH);
+  }
+  return cachedRootCA;
+}
+function getSigningKey() {
+  return process.env.APPLE_IAP_SIGNING_KEY || "";
+}
+function getKeyId() {
+  return process.env.APPLE_IAP_KEY_ID || "";
+}
+function getIssuerId() {
+  return process.env.APPLE_IAP_ISSUER_ID || "";
+}
+function getAppleAppId() {
+  const raw = process.env.APPLE_APP_ID;
+  return raw ? Number(raw) : void 0;
+}
+function makeClient(environment) {
+  return new AppStoreServerAPIClient(
+    getSigningKey(),
+    getKeyId(),
+    getIssuerId(),
+    BUNDLE_ID,
+    environment
+  );
+}
+function makeVerifier(environment) {
+  return new SignedDataVerifier(
+    [getRootCA()],
+    true,
+    // enableOnlineChecks
+    environment,
+    BUNDLE_ID,
+    // Required by the library for Production (throws otherwise); Sandbox
+    // verification doesn't check it, so omitting there is fine.
+    environment === Environment.PRODUCTION ? getAppleAppId() : void 0
+  );
+}
+async function fetchSignedTransaction(transactionId) {
+  try {
+    const prodClient = makeClient(Environment.PRODUCTION);
+    const response = await prodClient.getTransactionInfo(transactionId);
+    if (!response.signedTransactionInfo) {
+      throw new Error("Empty signedTransactionInfo from Production");
+    }
+    return {
+      signedTransactionInfo: response.signedTransactionInfo,
+      environment: Environment.PRODUCTION
+    };
+  } catch (err) {
+    const isNotFound = err instanceof APIException && (err.apiError === APIError.ORIGINAL_TRANSACTION_ID_NOT_FOUND || err.httpStatusCode === 404);
+    if (!isNotFound) throw err;
+    const sandboxClient = makeClient(Environment.SANDBOX);
+    const response = await sandboxClient.getTransactionInfo(transactionId);
+    if (!response.signedTransactionInfo) {
+      throw new Error("Empty signedTransactionInfo from Sandbox");
+    }
+    return {
+      signedTransactionInfo: response.signedTransactionInfo,
+      environment: Environment.SANDBOX
+    };
+  }
+}
+async function verifyIosReceipt(transactionId, productId) {
   const allowTestReceipts = process.env.NODE_ENV !== "production";
-  if (allowTestReceipts && (receiptData === "TEST_RECEIPT" || receiptData.startsWith("TEST_RECEIPT_"))) {
+  if (allowTestReceipts && (transactionId === "TEST_RECEIPT" || transactionId.startsWith("TEST_RECEIPT_"))) {
     const testProductId = productId || "com.studymind.pro.monthly";
     const productConfig = TEST_PRODUCTS[testProductId];
     if (!productConfig) {
-      return {
-        valid: false,
-        productId: null,
-        expiresAt: null,
-        status: "invalid",
-        originalTransactionId: null,
-        isSubscription: false,
-        error: "Unknown product ID"
-      };
+      return invalidResult("Unknown product ID");
     }
     const expiresAt = productConfig.isSubscription ? new Date(
       Date.now() + ("durationDays" in productConfig ? productConfig.durationDays : 30) * 24 * 60 * 60 * 1e3
@@ -942,24 +1024,60 @@ async function verifyIosReceipt(receiptData, productId) {
       isSubscription: productConfig.isSubscription
     };
   }
-  console.warn(
-    "[iOS Validator] Production validation not implemented. Rejecting receipt."
-  );
-  return {
-    valid: false,
-    productId: null,
-    expiresAt: null,
-    status: "invalid",
-    originalTransactionId: null,
-    isSubscription: false,
-    error: "Production validation not configured"
-  };
+  if (!getSigningKey() || !getKeyId() || !getIssuerId() || getAppleAppId() === void 0) {
+    console.error(
+      "[iOS Validator] Missing env: APPLE_IAP_SIGNING_KEY, APPLE_IAP_KEY_ID, APPLE_IAP_ISSUER_ID, or APPLE_APP_ID"
+    );
+    return invalidResult("Billing not configured");
+  }
+  try {
+    const { signedTransactionInfo, environment } = await fetchSignedTransaction(
+      transactionId
+    );
+    const verifier = makeVerifier(environment);
+    const decoded = await verifier.verifyAndDecodeTransaction(
+      signedTransactionInfo
+    );
+    const resolvedProductId = decoded.productId || productId || null;
+    const isSubscription = resolvedProductId ? isSubscriptionProduct(resolvedProductId) : false;
+    const expiresAt = decoded.expiresDate ? new Date(decoded.expiresDate) : null;
+    let status;
+    let valid;
+    if (decoded.revocationDate) {
+      status = "canceled";
+      valid = false;
+    } else if (isSubscription && expiresAt) {
+      valid = expiresAt.getTime() > Date.now();
+      status = valid ? "active" : "expired";
+    } else {
+      valid = true;
+      status = "active";
+    }
+    return {
+      valid,
+      productId: resolvedProductId,
+      expiresAt,
+      status,
+      originalTransactionId: decoded.originalTransactionId || null,
+      isSubscription
+    };
+  } catch (err) {
+    if (err instanceof APIException) {
+      console.error(
+        `[iOS Validator] App Store Server API error (${err.httpStatusCode}, ${err.apiError}):`,
+        err.errorMessage
+      );
+      return invalidResult("Apple verification failed");
+    }
+    console.error("[iOS Validator] Verification error:", err?.message || err);
+    return invalidResult("Apple verification failed");
+  }
 }
 function getIosProductPlan(productId) {
   const product = TEST_PRODUCTS[productId];
   return product?.plan || null;
 }
-var TEST_PRODUCTS;
+var TEST_PRODUCTS, BUNDLE_ID, APPLE_ROOT_CA_PATH, cachedRootCA;
 var init_iosReceiptValidator = __esm({
   "server/billing/iosReceiptValidator.ts"() {
     "use strict";
@@ -996,12 +1114,21 @@ var init_iosReceiptValidator = __esm({
         durationDays: 365
       }
     };
+    BUNDLE_ID = "com.shanethetester.studymind";
+    APPLE_ROOT_CA_PATH = resolve(
+      process.cwd(),
+      "server",
+      "billing",
+      "certs",
+      "AppleRootCA-G3.cer"
+    );
+    cachedRootCA = null;
   }
 });
 
 // server/billing/androidPurchaseValidator.ts
 import { google } from "googleapis";
-function isSubscriptionProduct(productId) {
+function isSubscriptionProduct2(productId) {
   const config = PRODUCT_CONFIG[productId];
   if (config) return config.isSubscription;
   return productId.includes(".monthly") || productId.includes(".yearly");
@@ -1023,7 +1150,7 @@ function getAuthClient() {
     return null;
   }
 }
-function invalidResult(error) {
+function invalidResult2(error) {
   return {
     valid: false,
     productId: null,
@@ -1038,7 +1165,7 @@ async function verifyAndroidPurchase(purchaseToken, productId) {
   const allowTestTokens = process.env.NODE_ENV !== "production";
   if (allowTestTokens && (purchaseToken === "TEST_TOKEN" || purchaseToken.startsWith("TEST_TOKEN_"))) {
     const config = PRODUCT_CONFIG[productId];
-    if (!config) return invalidResult("Unknown product ID");
+    if (!config) return invalidResult2("Unknown product ID");
     const expiresAt = config.isSubscription ? new Date(Date.now() + (config.durationDays || 30) * 24 * 60 * 60 * 1e3) : null;
     return {
       valid: true,
@@ -1055,11 +1182,11 @@ async function verifyAndroidPurchase(purchaseToken, productId) {
     console.error(
       "[Android Validator] Missing env: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON or GOOGLE_PLAY_PACKAGE_NAME"
     );
-    return invalidResult("Billing not configured");
+    return invalidResult2("Billing not configured");
   }
   const publisher = google.androidpublisher({ version: "v3", auth });
   try {
-    if (isSubscriptionProduct(productId)) {
+    if (isSubscriptionProduct2(productId)) {
       return await verifySubscription(
         publisher,
         packageName,
@@ -1078,10 +1205,10 @@ async function verifyAndroidPurchase(purchaseToken, productId) {
     const code = err?.code || err?.response?.status;
     const msg = err?.message || String(err);
     console.error(`[Android Validator] Google API error (${code}):`, msg);
-    if (code === 404) return invalidResult("Purchase not found on Google Play");
+    if (code === 404) return invalidResult2("Purchase not found on Google Play");
     if (code === 401 || code === 403)
-      return invalidResult("Server auth failed with Google Play");
-    return invalidResult("Google Play verification failed");
+      return invalidResult2("Server auth failed with Google Play");
+    return invalidResult2("Google Play verification failed");
   }
 }
 async function verifySubscription(publisher, packageName, token, productId) {
@@ -1577,7 +1704,7 @@ var init_billing = __esm({
             }
             tokenOrTxnId = transactionId || receiptData;
             validationResult = await verifyIosReceipt(
-              receiptData || "TEST_RECEIPT",
+              transactionId || receiptData || "TEST_RECEIPT",
               productId
             );
             plan = getIosProductPlan(productId);
@@ -2626,7 +2753,7 @@ async function convertToWav(audioBuffer) {
   const outputPath = join(tmpdir(), `output-${randomUUID()}.wav`);
   try {
     await writeFile(inputPath, audioBuffer);
-    await new Promise((resolve2, reject) => {
+    await new Promise((resolve3, reject) => {
       const ffmpeg = spawn("ffmpeg", [
         "-i",
         inputPath,
@@ -2649,7 +2776,7 @@ async function convertToWav(audioBuffer) {
       ffmpeg.stderr.on("data", () => {
       });
       ffmpeg.on("close", (code) => {
-        if (code === 0) resolve2();
+        if (code === 0) resolve3();
         else reject(new Error(`ffmpeg exited with code ${code}`));
       });
       ffmpeg.on("error", reject);
@@ -3278,7 +3405,7 @@ This lecture covered important topics related to the subject matter. The main ta
                 const { buffer: audioBuffer, format } = await ensureCompatibleFormat(rawBuffer);
                 transcript = await speechToText(audioBuffer, format);
               } else {
-                await new Promise((resolve2) => setTimeout(resolve2, 2e3));
+                await new Promise((resolve3) => setTimeout(resolve3, 2e3));
                 transcript = MOCK_TRANSCRIPTIONS[Math.floor(Math.random() * MOCK_TRANSCRIPTIONS.length)];
               }
               await db_default.topic.update({
@@ -3354,7 +3481,7 @@ This lecture covered important topics related to the subject matter. The main ta
                 const { buffer: audioBuffer, format } = await ensureCompatibleFormat(rawBuffer);
                 transcript = await speechToText(audioBuffer, format);
               } else {
-                await new Promise((resolve2) => setTimeout(resolve2, 2e3));
+                await new Promise((resolve3) => setTimeout(resolve3, 2e3));
                 transcript = MOCK_TRANSCRIPTIONS[Math.floor(Math.random() * MOCK_TRANSCRIPTIONS.length)];
               }
               await db_default.job.update({
@@ -4957,13 +5084,13 @@ var app = express();
 var log = console.log;
 var IS_PRODUCTION3 = process.env.NODE_ENV === "production";
 function listenWithRetry(server, port, host, maxRetries = 5, delayMs = 1e3) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     let attempt = 0;
     function tryListen() {
       attempt++;
       server.listen({ port, host }, () => {
         log(`express server serving on port ${port}`);
-        resolve2();
+        resolve3();
       });
       server.once("error", (err) => {
         server.removeAllListeners("listening");
