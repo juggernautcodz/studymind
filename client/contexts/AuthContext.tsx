@@ -119,6 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: data.user.createdAt || new Date().toISOString(),
     };
 
+    // storage.* (semesters/courses/topics/flashcards/etc.) is a single
+    // on-device store with no per-user scoping — clear it before writing
+    // this account's identity, or the previous account's study material
+    // stays readable to whoever logs in next on this device.
+    await storage.clearAll();
     await storage.setUser(loggedInUser);
     await storage.setAuthToken(data.token);
     // staleTime: Infinity means cached queries never self-refetch — without
@@ -158,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: data.user.createdAt || new Date().toISOString(),
     };
 
+    await storage.clearAll();
     await storage.setUser(newUser);
     await storage.setAuthToken(data.token);
     queryClient.clear();
@@ -166,7 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await storage.clearUser();
+    await storage.clearAll();
     queryClient.clear();
     setUser(null);
   };
@@ -182,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       plan: "FREE",
       createdAt: new Date().toISOString(),
     };
+    await storage.clearAll();
     await storage.setUser(user);
     await storage.setAuthToken(token);
     queryClient.clear();
