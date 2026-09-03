@@ -5,7 +5,12 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Icon } from "@/components/Icon";
 import * as Haptics from "expo-haptics";
-import { useAudioRecorder, RecordingPresets, AudioModule } from "expo-audio";
+import {
+  useAudioRecorder,
+  RecordingPresets,
+  AudioModule,
+  setAudioModeAsync,
+} from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
 import Animated, {
   useAnimatedStyle,
@@ -85,6 +90,10 @@ export default function RecordScreen() {
     (async () => {
       const status = await AudioModule.requestRecordingPermissionsAsync();
       setPermissionGranted(status.granted);
+      // Required on iOS — without this, the native recorder's `allowsRecording`
+      // flag stays false and record() throws RecordingDisabledException.
+      // Android has no equivalent gate, which is why this only breaks on iOS.
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     })();
   }, []);
 

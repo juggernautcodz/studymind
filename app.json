@@ -13,8 +13,10 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "StudyMind needs microphone access to record your lectures for transcription and study material generation.",
         "NSCameraUsageDescription": "StudyMind needs camera access to capture whiteboard notes, textbook pages, and handwritten notes for OCR text extraction.",
-        "NSPhotoLibraryUsageDescription": "StudyMind needs photo library access to import images of notes and textbook pages for OCR text extraction."
-      }
+        "NSPhotoLibraryUsageDescription": "StudyMind needs photo library access to import images of notes and textbook pages for OCR text extraction.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
@@ -31,7 +33,11 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "web": {
