@@ -63,7 +63,7 @@ function ToastItem({
 
     const timeout = setTimeout(() => {
       dismiss();
-    }, toast.duration || 3000);
+    }, toast.duration || 4500);
 
     return () => clearTimeout(timeout);
   }, []);
@@ -176,7 +176,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast, hideToast }}>
       {children}
-      <View style={[styles.container, { top: insets.top + Spacing.md }]}>
+      <View
+        style={[
+          styles.container,
+          // Math.max guards against unreliable safe-area insets inside
+          // native-modal-presented screens (e.g. BillingScreen on iOS),
+          // where insets.top can read too small and let the toast render
+          // under the notch/Dynamic Island instead of clearing it.
+          { top: Math.max(insets.top, 44) + Spacing.md },
+        ]}
+      >
         {toasts.map((toast, index) => (
           <ToastItem
             key={toast.id ?? `${toast.title}-${index}`}
