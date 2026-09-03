@@ -252,45 +252,71 @@ purchase to produce a real `transactionId`.
 
 ---
 
-## Phase 3 — EAS build & submit config for iOS
+## Phase 3 — EAS build & submit config for iOS ✅ done (2026-09-02/03)
 
-`eas.json` currently has no iOS-specific keys under `build.production`,
-`build.preview`, etc. — profiles apply per `--platform` flag, so this is
-additive, not a rewrite:
+Fixed a real blocker before the first build: `eas.json` had `prebuildCommand`
+hardcoded to `--platform android` at the top level of the `preview`/
+`production` profiles. A custom `prebuildCommand` fully replaces EAS's
+default prebuild step rather than adding to it, so `eas build --platform
+ios` would have only regenerated the Android native project and left iOS
+with nothing to build from. Fixed by scoping it per-platform (`android`/
+`ios` blocks), verified via `eas-cli config --platform ios --profile
+production` that the resolved profile actually runs the iOS prebuild
+command (commit `3db3290`).
 
-1. First iOS build: `eas build --platform ios --profile production` — EAS
-   will prompt to either let it auto-manage credentials (recommended,
-   mirrors how Android's signing already works) or supply your own
-   distribution certificate/provisioning profile. Choose auto-managed
-   unless you have a specific reason not to.
-2. Add an `ios` block to `eas.json`'s `submit.production` section (mirrors
-   the existing `android` block) once ready to automate `eas submit
-   --platform ios`. Needs the second API key from Phase 0 step 6.
-3. `app.json`'s `ios` block (lines 10-17) already has the required
-   `NSMicrophoneUsageDescription`, `NSCameraUsageDescription`,
-   `NSPhotoLibraryUsageDescription` usage strings — Apple requires these
-   for any permission StudyMind requests; confirm the wording still
-   accurately describes what the app does before submitting (Apple review
-   checks that these match actual app behavior).
+First iOS build (`eas build --platform ios --profile production`)
+succeeded 2026-09-02 — auto-managed distribution certificate, provisioning
+profile, and APNs push key all generated via interactive Apple ID login
+(regular password + device 2FA code; the *app-specific* password from
+Phase 0 is a different credential, only used for `eas submit`, not this
+login prompt — easy to mix up, cost some back-and-forth this session).
+`eas submit --platform ios --profile production --latest` uploaded it to
+App Store Connect, generating a separate App Store Connect API key for
+submission (distinct from the App Store Server key from Phase 0.8).
+
+Apple export-compliance question ("standard/exempt encryption?") answered
+Y during the build — StudyMind only uses standard TLS, no custom crypto —
+which wrote `ITSAppUsesNonExemptEncryption: false` back into `app.json`.
+`autoIncrement: true` bumped `ios.buildNumber` to `"2"`, also in `app.json`.
 
 ---
 
-## Phase 4 — TestFlight internal testing
+## Phase 4 — TestFlight internal testing ✅ core flow verified (2026-09-03)
 
-Do this before any public submission — same purpose as the Android internal
-testing track already used.
+No Mac/iPhone on hand — tested by borrowing a friend's iPhone and signing
+into **just the Media & Purchases / App Store account** (Settings → tap
+name → Media & Purchases → Sign Out, then sign back in with
+`landrys424@gmail.com` in TestFlight) rather than her main Apple ID/iCloud,
+so her device stayed otherwise untouched. Internal Testing group
+"Team (Expo)" (auto-created by EAS submit) already had the account
+invited; no need to add her as a separate tester since TestFlight access
+follows the Apple ID signed into the App Store, not the physical device.
 
-1. Upload the Phase 3 build to TestFlight via `eas submit` or manually.
-2. Add yourself (and any other testers) under App Store Connect → TestFlight
-   → Internal Testing.
-3. Run the full purchase + restore flow against Apple's **sandbox**
-   environment (TestFlight builds use sandbox IAP automatically) — this is
-   the first real end-to-end test of Phase 1's server code against actual
-   Apple infrastructure, not just unit-level correctness.
-4. Confirm entitlements update correctly client-side after a sandbox
-   purchase (same class of bug as the Android `BillingContext` staleness
-   fix from `a7f4eb2` — worth deliberately checking this doesn't regress
-   for iOS).
+**Bug found and fixed:** the record button did nothing on iOS (silently —
+caught by an existing `try/catch` into a generic "Recording failed"
+toast) while working fine on Android. Root cause, confirmed via
+`expo-audio`'s native iOS source (`AudioRecorder.swift`):
+`startRecording()` guards on a native `allowsRecording` flag that's only
+set via `setAudioModeAsync({ allowsRecording: true })` — a call
+`RecordScreen.tsx` never made. Android has no equivalent gate (`expo-audio`'s
+own JS wrapper strips `allowsRecording` out of the Android-bound config
+object entirely), which is exactly why it only broke on iOS. Fixed with
+one `setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true })`
+call alongside the existing mic-permission-request effect on mount
+(commit `25e4e03`). New build + resubmit + reinstall via TestFlight
+confirmed the fix — record now works.
+
+Other core features (notes, transcription, whiteboard capture) tested
+working on this same device.
+
+**Still to confirm before Phase 5:** the actual sandbox purchase + restore
+flow (Plus/Pro subscribe, then restore) — this is the real first
+end-to-end test of Phase 1's server-side receipt validation against
+Apple's live infrastructure, not yet explicitly confirmed as of this
+writing. Also worth checking entitlements update correctly client-side
+after a sandbox purchase (same class of bug as the Android
+`BillingContext` staleness fix from `a7f4eb2` — worth deliberately
+checking this doesn't regress for iOS).
 
 ---
 
