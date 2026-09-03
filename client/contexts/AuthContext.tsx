@@ -6,7 +6,7 @@ import React, {
   ReactNode,
 } from "react";
 import { storage } from "@/lib/storage";
-import { getApiUrl, setAuthExpiredCallback, clearAuthExpiredCallback } from "@/lib/query-client";
+import { getApiUrl, setAuthExpiredCallback, clearAuthExpiredCallback, queryClient } from "@/lib/query-client";
 import { registerPushTokenWithServer } from "@/lib/notifications";
 import type { User } from "@/types";
 
@@ -122,6 +122,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     await storage.setUser(loggedInUser);
     await storage.setAuthToken(data.token);
+    // staleTime: Infinity means cached queries never self-refetch — without
+    // clearing here, a different account's data can keep showing after
+    // switching who's logged in on the same device.
+    queryClient.clear();
     setUser(loggedInUser);
     registerPushTokenWithServer(data.token).catch(() => {});
   };
@@ -157,12 +161,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     await storage.setUser(newUser);
     await storage.setAuthToken(data.token);
+    queryClient.clear();
     setUser(newUser);
     registerPushTokenWithServer(data.token).catch(() => {});
   };
 
   const logout = async () => {
     await storage.clearUser();
+    queryClient.clear();
     setUser(null);
   };
 
@@ -176,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     await storage.setUser(guestUser);
     await storage.setAuthToken(`guest_token_${guestUser.id}`);
+    queryClient.clear();
     setUser(guestUser);
   };
 
@@ -192,6 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     await storage.setUser(user);
     await storage.setAuthToken(token);
+    queryClient.clear();
     setUser(user);
     registerPushTokenWithServer(token).catch(() => {});
   };
@@ -230,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     await storage.clearAll();
+    queryClient.clear();
     setUser(null);
   };
 
