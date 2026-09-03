@@ -75,7 +75,6 @@ async function main() {
     ...process.env,
     PORT: String(PORT),
     NODE_ENV: "production",
-    DATABASE_URL: "file:./prisma/prod.db",
   };
 
   console.log(`Starting production server on PORT=${PORT}...`);

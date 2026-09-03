@@ -1,30 +1,27 @@
 import pkg from "@prisma/client";
 const { PrismaClient } = pkg;
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 function getDatabaseUrl(): string {
-  const url =
-    process.env.SQLITE_DATABASE_URL ||
-    process.env.DATABASE_URL ||
-    "file:./prisma/dev.db";
+  const url = process.env.DATABASE_URL;
 
-  if (/^postgres(ql)?:\/\//i.test(url)) {
+  if (!url) {
     throw new Error(
-      `SQLite app detected a Postgres DATABASE_URL.\n` +
-      `Set SQLITE_DATABASE_URL to a file: URL (e.g. file:./prisma/dev.db).\n` +
-      `Got: ${url}`
+      `DATABASE_URL env var must be set to a Postgres connection string.`
     );
   }
 
-  if (!/^file:/i.test(url)) {
-    throw new Error(`SQLite datasource URL must start with "file:". Got: ${url}`);
+  if (!/^postgres(ql)?:\/\//i.test(url)) {
+    throw new Error(
+      `DATABASE_URL must be a postgres:// or postgresql:// connection string. Got: ${url}`
+    );
   }
 
   return url;
 }
 
 const databaseUrl = getDatabaseUrl();
-const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
+const adapter = new PrismaPg({ connectionString: databaseUrl });
 
 const globalForPrisma = globalThis as unknown as {
   prisma: InstanceType<typeof PrismaClient> | undefined;

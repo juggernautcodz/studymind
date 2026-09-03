@@ -59,7 +59,7 @@ function main() {
   }
   console.log("");
 
-  console.log("Step 2: Prisma db push (sync schema to SQLite)");
+  console.log("Step 2: Prisma db push (sync schema to Postgres)");
   try {
     execSync("npx prisma db push --accept-data-loss", { stdio: "inherit", timeout: 60_000 });
     console.log("Prisma db push complete");
