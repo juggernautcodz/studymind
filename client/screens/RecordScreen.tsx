@@ -1381,6 +1381,11 @@ const styles = StyleSheet.create({
   },
   timer: {
     fontSize: 72,
+    // ThemedText's "display" type sets lineHeight: 40 for its default
+    // fontSize: 32 — without overriding it here too, RN doesn't clip the
+    // overflowing glyphs, so the 72px digits paint past their 40px box
+    // and visually collide with the waveform bars rendered right after.
+    lineHeight: 84,
     fontWeight: "200",
     letterSpacing: -2,
   },
