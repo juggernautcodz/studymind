@@ -18,7 +18,7 @@ export default function LoginScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { login, signup, loginAsGuest } = useAuth();
+  const { login, signup } = useAuth();
 
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -26,7 +26,6 @@ export default function LoginScreen() {
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isGuestLoading, setIsGuestLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async () => {
@@ -62,19 +61,6 @@ export default function LoginScreen() {
     setIsLogin(!isLogin);
     setError("");
     Haptics.selectionAsync();
-  };
-
-  const handleGuestLogin = async () => {
-    setIsGuestLoading(true);
-    try {
-      await loginAsGuest();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
-      setError("Failed to continue as guest");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setIsGuestLoading(false);
-    }
   };
 
   return (
@@ -186,24 +172,6 @@ export default function LoginScreen() {
           <ThemedText type="link">{isLogin ? "Sign Up" : "Sign In"}</ThemedText>
         </Pressable>
 
-        <View style={styles.dividerContainer}>
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <ThemedText
-            type="small"
-            style={[styles.dividerText, { color: theme.textSecondary }]}
-          >
-            or
-          </ThemedText>
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-        </View>
-
-        <Button
-          variant="secondary"
-          onPress={handleGuestLogin}
-          disabled={isGuestLoading}
-        >
-          {isGuestLoading ? "Please wait..." : "Continue as Guest"}
-        </Button>
       </View>
     </KeyboardAwareScrollViewCompat>
   );
@@ -257,17 +225,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-  },
-  dividerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: Spacing.xl,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    marginHorizontal: Spacing.md,
   },
 });

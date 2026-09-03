@@ -16,7 +16,6 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
-  loginAsGuest: () => Promise<void>;
   loginWithToken: (token: string, userData: { id: string; email: string; name: string | null }) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
@@ -172,20 +171,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  const loginAsGuest = async () => {
-    const guestUser: User = {
-      id: `guest_${Date.now()}`,
-      email: "guest@studymind.app",
-      name: "Guest User",
-      plan: "FREE",
-      createdAt: new Date().toISOString(),
-    };
-    await storage.setUser(guestUser);
-    await storage.setAuthToken(`guest_token_${guestUser.id}`);
-    queryClient.clear();
-    setUser(guestUser);
-  };
-
   const loginWithToken = async (
     token: string,
     userData: { id: string; email: string; name: string | null },
@@ -250,7 +235,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         signup,
-        loginAsGuest,
         loginWithToken,
         logout,
         updateUser,
