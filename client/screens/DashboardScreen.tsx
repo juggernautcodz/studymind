@@ -85,6 +85,8 @@ export default function DashboardScreen() {
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
 
   const isMounted = useRef(true);
+  const ensureFullSetupInFlight = useRef<Promise<{ courseId: string; topicId: string } | null> | null>(null);
+  const ensureTopicForCourseInFlight = useRef<Record<string, Promise<string | null> | undefined>>({});
   const flashcardLoadId = useRef(0);
   const cancelledRef = useRef(false);
 
@@ -216,55 +218,71 @@ export default function DashboardScreen() {
   };
 
   const ensureFullSetup = async (): Promise<{ courseId: string; topicId: string } | null> => {
-    try {
-      const currentUser = await storage.getUser();
-      if (!currentUser) return null;
+    // Several "add content" buttons can each call this before `loadData()`
+    // updates component state — without sharing one in-flight run, each
+    // call sees an empty semesters/courses/topics list and creates its own
+    // duplicate "My Studies" / "General" default setup.
+    if (ensureFullSetupInFlight.current) return ensureFullSetupInFlight.current;
 
-      let currentSemesters = semesters;
-      let currentCourses = courses;
-      let currentTopics = topics;
+    const run = async (): Promise<{ courseId: string; topicId: string } | null> => {
+      try {
+        const currentUser = await storage.getUser();
+        if (!currentUser) return null;
 
-      if (currentSemesters.length === 0) {
-        const newSemester = await storage.createSemester({
-          userId: currentUser.id,
-          name: "My Studies",
-          startDate: new Date().toISOString(),
-          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        });
-        currentSemesters = [newSemester];
+        // Re-fetch fresh from storage rather than trusting closure state,
+        // which may already be stale by the time this runs.
+        let currentSemesters = await storage.getSemesters();
+        let currentCourses = await storage.getCourses();
+        let currentTopics = await storage.getTopics();
+
+        if (currentSemesters.length === 0) {
+          const newSemester = await storage.createSemester({
+            userId: currentUser.id,
+            name: "My Studies",
+            startDate: new Date().toISOString(),
+            endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          });
+          currentSemesters = [newSemester];
+        }
+
+        if (currentCourses.length === 0) {
+          const newCourse = await storage.createCourse({
+            userId: currentUser.id,
+            semesterId: currentSemesters[0].id,
+            name: "General",
+            code: "GEN",
+            color: "#4F46E5",
+          });
+          currentCourses = [newCourse];
+        }
+
+        const targetCourseId = currentCourses[0].id;
+        let courseTopics = currentTopics.filter((t) => t.courseId === targetCourseId);
+        if (courseTopics.length === 0) {
+          const token = await getAuthToken();
+          const newTopic = await createTopicWithServerSync({
+            userId: currentUser.id,
+            courseId: targetCourseId,
+            name: "General",
+            orderIndex: 0,
+            status: "pending",
+          }, token);
+          courseTopics = [newTopic];
+        }
+
+        await loadData();
+        return { courseId: targetCourseId, topicId: courseTopics[0].id };
+      } catch {
+        showToast({ type: "error", title: "Error", message: "Could not set up. Please try again." });
+        return null;
       }
+    };
 
-      if (currentCourses.length === 0) {
-        const newCourse = await storage.createCourse({
-          userId: currentUser.id,
-          semesterId: currentSemesters[0].id,
-          name: "General",
-          code: "GEN",
-          color: "#4F46E5",
-        });
-        currentCourses = [newCourse];
-      }
-
-      const targetCourseId = currentCourses[0].id;
-      let courseTopics = currentTopics.filter((t) => t.courseId === targetCourseId);
-      if (courseTopics.length === 0) {
-        const token = await getAuthToken();
-        const newTopic = await createTopicWithServerSync({
-          userId: currentUser.id,
-          courseId: targetCourseId,
-          name: "General",
-          orderIndex: 0,
-          status: "pending",
-        }, token);
-        courseTopics = [newTopic];
-      }
-
-      await loadData();
-      return { courseId: targetCourseId, topicId: courseTopics[0].id };
-    } catch {
-      showToast({ type: "error", title: "Error", message: "Could not set up. Please try again." });
-      return null;
-    }
+    const promise = run().finally(() => {
+      ensureFullSetupInFlight.current = null;
+    });
+    ensureFullSetupInFlight.current = promise;
+    return promise;
   };
 
   const handleQuickRecord = async () => {
@@ -379,25 +397,37 @@ export default function DashboardScreen() {
   };
 
   const ensureTopicForCourse = async (courseId: string): Promise<string | null> => {
-    const courseTopics = topics.filter((t) => t.courseId === courseId);
-    if (courseTopics.length > 0) return courseTopics[0].id;
-    try {
-      const currentUser = await storage.getUser();
-      if (!currentUser) return null;
-      const token = await getAuthToken();
-      const newTopic = await createTopicWithServerSync({
-        userId: currentUser.id,
-        courseId,
-        name: "General",
-        orderIndex: 0,
-        status: "pending",
-      }, token);
-      await loadData();
-      return newTopic.id;
-    } catch {
-      showToast({ type: "error", title: "Error", message: "Could not set up. Please try again." });
-      return null;
+    if (ensureTopicForCourseInFlight.current[courseId]) {
+      return ensureTopicForCourseInFlight.current[courseId];
     }
+
+    const run = async (): Promise<string | null> => {
+      const freshTopics = await storage.getTopicsByCourse(courseId);
+      if (freshTopics.length > 0) return freshTopics[0].id;
+      try {
+        const currentUser = await storage.getUser();
+        if (!currentUser) return null;
+        const token = await getAuthToken();
+        const newTopic = await createTopicWithServerSync({
+          userId: currentUser.id,
+          courseId,
+          name: "General",
+          orderIndex: 0,
+          status: "pending",
+        }, token);
+        await loadData();
+        return newTopic.id;
+      } catch {
+        showToast({ type: "error", title: "Error", message: "Could not set up. Please try again." });
+        return null;
+      }
+    };
+
+    const promise = run().finally(() => {
+      delete ensureTopicForCourseInFlight.current[courseId];
+    });
+    ensureTopicForCourseInFlight.current[courseId] = promise;
+    return promise;
   };
 
   const readFileAsBase64 = async (uri: string): Promise<string> => {

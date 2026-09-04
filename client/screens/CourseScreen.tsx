@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   StyleSheet,
@@ -78,6 +78,7 @@ export default function CourseScreen() {
 
   const [course, setCourse] = useState<Course | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
+  const ensureTopicInFlight = useRef<Promise<string | null> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddTopicSheet, setShowAddTopicSheet] = useState(false);
   const [showRecordSheet, setShowRecordSheet] = useState(false);
@@ -164,43 +165,57 @@ export default function CourseScreen() {
   }, [navigation, course, theme.link]);
 
   const ensureTopicForCourse = async (): Promise<string | null> => {
-    if (topics.length > 0) return topics[0].id;
-    try {
-      const user = await storage.getUser();
-      if (!user) return null;
-      const token = await getAuthToken();
+    // Guard against concurrent callers (multiple content-action taps before
+    // `loadData()` updates state) each independently creating their own
+    // "General" topic for this course.
+    if (ensureTopicInFlight.current) return ensureTopicInFlight.current;
+
+    const run = async (): Promise<string | null> => {
+      const freshTopics = await storage.getTopicsByCourse(courseId);
+      if (freshTopics.length > 0) return freshTopics[0].id;
       try {
-        const newTopic = await createTopicWithServerSync(
-          {
+        const user = await storage.getUser();
+        if (!user) return null;
+        const token = await getAuthToken();
+        try {
+          const newTopic = await createTopicWithServerSync(
+            {
+              userId: user.id,
+              courseId,
+              name: "General",
+              orderIndex: 0,
+              status: "pending",
+            },
+            token,
+          );
+          await loadData();
+          return newTopic.id;
+        } catch {
+          const localTopic = await storage.createTopic({
             userId: user.id,
             courseId,
             name: "General",
             orderIndex: 0,
             status: "pending",
-          },
-          token,
-        );
-        await loadData();
-        return newTopic.id;
+          });
+          await loadData();
+          return localTopic.id;
+        }
       } catch {
-        const localTopic = await storage.createTopic({
-          userId: user.id,
-          courseId,
-          name: "General",
-          orderIndex: 0,
-          status: "pending",
+        showToast({
+          type: "error",
+          title: "Error",
+          message: "Could not set up. Please try again.",
         });
-        await loadData();
-        return localTopic.id;
+        return null;
       }
-    } catch {
-      showToast({
-        type: "error",
-        title: "Error",
-        message: "Could not set up. Please try again.",
-      });
-      return null;
-    }
+    };
+
+    const promise = run().finally(() => {
+      ensureTopicInFlight.current = null;
+    });
+    ensureTopicInFlight.current = promise;
+    return promise;
   };
 
   const handleRecord = async () => {
