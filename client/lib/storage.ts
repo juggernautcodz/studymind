@@ -37,9 +37,24 @@ const KEYS = {
   EXAM_ATTEMPTS: "studymind_exam_attempts",
 };
 
+// USER/AUTH_TOKEN describe "who's currently signed in on this device" and
+// stay global. Every other key holds actual study content and must be
+// namespaced per account, or one account's data is readable by the next
+// account that logs in on the same device.
+let currentUserId: string | null = null;
+
+export function setActiveUser(userId: string | null): void {
+  currentUserId = userId;
+}
+
+function scopeKey(key: string): string {
+  if (key === KEYS.USER || key === KEYS.AUTH_TOKEN) return key;
+  return currentUserId ? `${currentUserId}:${key}` : key;
+}
+
 async function getItems<T>(key: string): Promise<T[]> {
   try {
-    const data = await AsyncStorage.getItem(key);
+    const data = await AsyncStorage.getItem(scopeKey(key));
     return data ? JSON.parse(data) : [];
   } catch {
     return [];
@@ -47,12 +62,12 @@ async function getItems<T>(key: string): Promise<T[]> {
 }
 
 async function setItems<T>(key: string, items: T[]): Promise<void> {
-  await AsyncStorage.setItem(key, JSON.stringify(items));
+  await AsyncStorage.setItem(scopeKey(key), JSON.stringify(items));
 }
 
 async function getItem<T>(key: string): Promise<T | null> {
   try {
-    const data = await AsyncStorage.getItem(key);
+    const data = await AsyncStorage.getItem(scopeKey(key));
     return data ? JSON.parse(data) : null;
   } catch {
     return null;
@@ -60,7 +75,7 @@ async function getItem<T>(key: string): Promise<T | null> {
 }
 
 async function setItem<T>(key: string, item: T): Promise<void> {
-  await AsyncStorage.setItem(key, JSON.stringify(item));
+  await AsyncStorage.setItem(scopeKey(key), JSON.stringify(item));
 }
 
 export const storage = {
@@ -706,6 +721,6 @@ export const storage = {
   },
 
   async clearAll(): Promise<void> {
-    await AsyncStorage.multiRemove(Object.values(KEYS));
+    await AsyncStorage.multiRemove(Object.values(KEYS).map(scopeKey));
   },
 };

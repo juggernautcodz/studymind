@@ -5,7 +5,7 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
-import { storage } from "@/lib/storage";
+import { storage, setActiveUser } from "@/lib/storage";
 import { getApiUrl, setAuthExpiredCallback, clearAuthExpiredCallback, queryClient } from "@/lib/query-client";
 import { registerPushTokenWithServer } from "@/lib/notifications";
 import type { User } from "@/types";
@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setAuthExpiredCallback(() => {
       storage.clearUser().catch(() => {});
+      setActiveUser(null);
       setUser(null);
     });
     return () => clearAuthExpiredCallback();
@@ -68,18 +69,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               createdAt: data.user.createdAt || new Date().toISOString(),
             };
 
+            setActiveUser(loadedUser.id);
             await storage.setUser(loadedUser);
             setUser(loadedUser);
           } else {
+            setActiveUser(null);
             await storage.clearUser();
             setUser(null);
           }
         } catch (error) {
           console.log("Backend not available, using local auth");
           const savedUser = await storage.getUser();
+          setActiveUser(savedUser?.id ?? null);
           setUser(savedUser);
         }
       } else {
+        setActiveUser(null);
         const savedUser = await storage.getUser();
         setUser(savedUser);
       }
@@ -119,11 +124,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: data.user.createdAt || new Date().toISOString(),
     };
 
-    // storage.* (semesters/courses/topics/flashcards/etc.) is a single
-    // on-device store with no per-user scoping — clear it before writing
-    // this account's identity, or the previous account's study material
-    // stays readable to whoever logs in next on this device.
-    await storage.clearAll();
+    // storage.* content keys are namespaced per user id (see
+    // client/lib/storage.ts) — switch the active namespace before writing,
+    // so this account reads/writes only its own data.
+    setActiveUser(loggedInUser.id);
     await storage.setUser(loggedInUser);
     await storage.setAuthToken(data.token);
     // staleTime: Infinity means cached queries never self-refetch — without
@@ -163,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: data.user.createdAt || new Date().toISOString(),
     };
 
-    await storage.clearAll();
+    setActiveUser(newUser.id);
     await storage.setUser(newUser);
     await storage.setAuthToken(data.token);
     queryClient.clear();
@@ -172,7 +176,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await storage.clearAll();
+    // Detach from this account's namespace without deleting its data — it's
+    // still there under its own key prefix next time this account logs in.
+    await storage.clearUser();
+    setActiveUser(null);
     queryClient.clear();
     setUser(null);
   };
@@ -188,7 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       plan: "FREE",
       createdAt: new Date().toISOString(),
     };
-    await storage.clearAll();
+    setActiveUser(user.id);
     await storage.setUser(user);
     await storage.setAuthToken(token);
     queryClient.clear();
@@ -230,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     await storage.clearAll();
+    setActiveUser(null);
     queryClient.clear();
     setUser(null);
   };
