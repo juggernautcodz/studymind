@@ -23,6 +23,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
+import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type { Topic, Flashcard } from "@/types";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -97,6 +98,25 @@ export default function StudyTodayScreen() {
     flipProgress.value = withSpring(showAnswer ? 0 : 1);
   };
 
+  const recordReview = useCallback(async (flashcardId: string, correct: boolean) => {
+    try {
+      const authHeaders = await getAuthHeaders();
+      if (!authHeaders.Authorization) return;
+      await fetch(
+        new URL(`/api/adaptive/flashcards/${flashcardId}/answer`, getApiUrl()).toString(),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          credentials: "include",
+          body: JSON.stringify({ correct }),
+        },
+      );
+    } catch {
+      // Best-effort — due-date tracking degrades gracefully offline; the
+      // session score above (correctCount/wrongCount) still works locally.
+    }
+  }, []);
+
   const handleAnswer = (correct: boolean) => {
     Haptics.impactAsync(
       correct
@@ -109,6 +129,8 @@ export default function StudyTodayScreen() {
     } else {
       setWrongCount((c) => c + 1);
     }
+
+    recordReview(currentCard.id, correct);
 
     if (currentIndex < allCards.length - 1) {
       setCurrentIndex((i) => i + 1);

@@ -1,7 +1,6 @@
 import { Router, Response } from "express";
 import prisma from "./db";
 import { authMiddleware, AuthRequest } from "./auth";
-import { checkUsageLimits } from "./middleware";
 
 const router = Router();
 
@@ -72,7 +71,6 @@ router.post(
 router.get(
   "/study-today",
   authMiddleware,
-  checkUsageLimits("adaptive"),
   async (req: AuthRequest, res: Response) => {
     try {
       const now = new Date();

@@ -82,6 +82,7 @@ export default function DashboardScreen() {
   const [processingSteps, setProcessingSteps] = useState<string[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [totalFlashcardCount, setTotalFlashcardCount] = useState(0);
+  const [dueFlashcardCount, setDueFlashcardCount] = useState<number | null>(null);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
 
   const isMounted = useRef(true);
@@ -141,15 +142,43 @@ export default function DashboardScreen() {
       setTopics(loadedTopics);
 
       const currentLoadId = ++flashcardLoadId.current;
+      let cardCount = 0;
       try {
         const allCards = await storage.getAllFlashcards();
+        cardCount = allCards.length;
         if (isMounted.current && flashcardLoadId.current === currentLoadId) {
-          setTotalFlashcardCount(allCards.length);
+          setTotalFlashcardCount(cardCount);
         }
       } catch {
         if (isMounted.current && flashcardLoadId.current === currentLoadId) {
           setTotalFlashcardCount(0);
         }
+      }
+
+      // Real due-for-review count from the SM-2 engine (server/adaptive.ts) —
+      // null (not 0) when it can't be determined (offline/guest), so
+      // getNextAction() falls back to the legacy "has any flashcards" copy
+      // instead of wrongly claiming "all caught up".
+      if (cardCount > 0) {
+        try {
+          const authHeaders = await getAuthHeaders();
+          const response = await fetch(
+            new URL("/api/adaptive/study-today", getApiUrl()).toString(),
+            { headers: authHeaders, credentials: "include" },
+          );
+          const due = response.ok
+            ? (await response.json())?.studyStats?.totalFlashcardsDue ?? null
+            : null;
+          if (isMounted.current && flashcardLoadId.current === currentLoadId) {
+            setDueFlashcardCount(typeof due === "number" ? due : null);
+          }
+        } catch {
+          if (isMounted.current && flashcardLoadId.current === currentLoadId) {
+            setDueFlashcardCount(null);
+          }
+        }
+      } else if (isMounted.current && flashcardLoadId.current === currentLoadId) {
+        setDueFlashcardCount(null);
       }
     } finally {
       if (isMounted.current) {
@@ -177,7 +206,30 @@ export default function DashboardScreen() {
   const hasStats = topics.length > 0 || totalFlashcardCount > 0 || courses.length > 0;
 
   const getNextAction = (): NextAction | null => {
-    if (totalFlashcardCount > 0) {
+    if (dueFlashcardCount !== null) {
+      if (dueFlashcardCount > 0) {
+        return {
+          type: "study",
+          title: `${dueFlashcardCount} card${dueFlashcardCount > 1 ? "s" : ""} due for review`,
+          subtitle: "Tap to review what's due today",
+          icon: "book-open",
+          color: theme.success,
+          onPress: () => navigation.navigate("StudyToday"),
+        };
+      }
+      if (totalFlashcardCount > 0) {
+        return {
+          type: "study",
+          title: "You're all caught up!",
+          subtitle: "Nothing due for review right now",
+          icon: "check-circle",
+          color: theme.success,
+          onPress: () => navigation.navigate("StudyToday"),
+        };
+      }
+    } else if (totalFlashcardCount > 0) {
+      // Due-date data unavailable (offline/guest) — fall back to the
+      // raw-count copy rather than guessing at what's actually due.
       return {
         type: "study",
         title: "Time to Study!",
