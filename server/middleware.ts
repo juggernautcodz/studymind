@@ -1,7 +1,7 @@
 import { Response, NextFunction } from "express";
 import prisma from "./db";
 import { AuthRequest } from "./auth";
-import { PLAN_LIMITS, getUsageInfo } from "./billing";
+import { PLAN_LIMITS, getUsageInfo, incrementUsage as incrementUsageAtomic } from "./billing";
 import { ANONYMOUS_USER_ID } from "./constants";
 
 export const checkUsageLimits = (
@@ -113,6 +113,13 @@ export const checkUsageLimits = (
   };
 };
 
+// Delegates to billing.ts's atomic upsert (keyed on the Usage table's
+// @@unique([userId, monthKey])) instead of a findFirst-then-create/update
+// check-then-act pattern. The old pattern raced when two increments for
+// the same user/month landed close together (e.g. two lectures finishing
+// transcription back-to-back): both requests could see no existing row,
+// both would try to create one, and the second create failed on the
+// unique constraint — silently dropping that increment.
 export const incrementUsage = async (
   userId: string,
   type: "recording" | "transcription",
@@ -120,35 +127,7 @@ export const incrementUsage = async (
 ) => {
   try {
     if (userId === ANONYMOUS_USER_ID) return;
-
-    const monthKey = new Date().toISOString().slice(0, 7);
-
-    const existing = await prisma.usage.findFirst({
-      where: { userId, monthKey },
-    });
-
-    if (existing) {
-      if (type === "recording") {
-        await prisma.usage.update({
-          where: { id: existing.id },
-          data: { recordingsCount: { increment: amount } },
-        });
-      } else if (type === "transcription") {
-        await prisma.usage.update({
-          where: { id: existing.id },
-          data: { transcriptionMinutesUsed: { increment: amount } },
-        });
-      }
-    } else {
-      await prisma.usage.create({
-        data: {
-          userId,
-          monthKey,
-          recordingsCount: type === "recording" ? amount : 0,
-          transcriptionMinutesUsed: type === "transcription" ? amount : 0,
-        },
-      });
-    }
+    await incrementUsageAtomic(userId, type, amount);
   } catch (error) {
     console.error("Increment usage error:", error);
   }
