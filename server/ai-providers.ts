@@ -1025,7 +1025,8 @@ router.post(
         return res.status(400).json({ error: "Text is required" });
       }
 
-      let flashcards: Array<{ front: string; back: string }> = [];
+      let flashcards: Array<{ front: string; back: string; quote?: string }> =
+        [];
 
       if (openai) {
         try {
@@ -1034,11 +1035,15 @@ router.post(
             messages: [
               {
                 role: "system",
-                content: `You are a study assistant creating flashcards from notes. Generate 5-10 flashcards that cover the key concepts. Return as JSON array with "front" (question) and "back" (answer) fields. Focus on:
+                content: `You are a study assistant creating flashcards from notes. Generate 5-10 flashcards that cover the key concepts. Return as JSON array with "front" (question), "back" (answer), and "quote" fields. Focus on:
 - Key definitions and terms
-- Important concepts and their explanations  
+- Important concepts and their explanations
 - Cause and effect relationships
 - Comparisons between concepts
+
+"quote" must be copied verbatim (word-for-word, no paraphrasing) from the
+source text below — the exact sentence or short passage that "back" is
+based on, so the student can see where the answer came from.
 
 Return ONLY valid JSON array, no markdown.`,
               },
@@ -1053,6 +1058,20 @@ Return ONLY valid JSON array, no markdown.`,
           const content = response.choices[0]?.message?.content || "[]";
           const cleaned = content.replace(/```json\n?|\n?```/g, "").trim();
           flashcards = JSON.parse(cleaned);
+
+          // The model is asked for a verbatim quote, but LLMs still drift
+          // (paraphrase, drop punctuation) often enough that a fabricated
+          // "citation" would be worse than none — verify against the
+          // source text (whitespace/case-normalized) and drop it if it
+          // doesn't actually appear there.
+          const normalize = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+          const normalizedText = normalize(text);
+          flashcards = flashcards.map((card) => {
+            if (card.quote && normalizedText.includes(normalize(card.quote))) {
+              return card;
+            }
+            return { front: card.front, back: card.back };
+          });
         } catch (error) {
           console.error("Flashcard generation failed:", error);
         }

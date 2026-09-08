@@ -563,6 +563,7 @@ export default function RecordScreen() {
                 question: fc.front,
                 answer: fc.back,
                 orderIndex: i,
+                sourceQuote: fc.quote,
               }),
             );
             if (cards.length > 0) {

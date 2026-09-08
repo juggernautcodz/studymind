@@ -77,6 +77,7 @@ export interface Flashcard {
   question: string;
   answer: string;
   orderIndex: number;
+  sourceQuote?: string;
 }
 
 export interface Quiz {

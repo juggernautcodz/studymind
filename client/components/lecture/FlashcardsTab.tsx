@@ -196,6 +196,22 @@ export default function FlashcardsTab({
             <ThemedText type="body" style={styles.cardText}>
               {currentCard.answer}
             </ThemedText>
+            {currentCard.sourceQuote ? (
+              <View
+                style={[
+                  styles.sourceQuote,
+                  { borderTopColor: theme.border },
+                ]}
+              >
+                <ThemedText
+                  type="caption"
+                  style={{ color: theme.textSecondary, fontStyle: "italic" }}
+                  numberOfLines={3}
+                >
+                  {`"${currentCard.sourceQuote}"`}
+                </ThemedText>
+              </View>
+            ) : null}
           </Animated.View>
         </Pressable>
       </View>
@@ -341,6 +357,13 @@ const styles = StyleSheet.create({
   tapHint: {
     position: "absolute",
     bottom: Spacing.lg,
+  },
+  sourceQuote: {
+    marginTop: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderTopWidth: 1,
+    maxWidth: "100%",
   },
   navigation: {
     flexDirection: "row",

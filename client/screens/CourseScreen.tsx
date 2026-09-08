@@ -435,6 +435,7 @@ export default function CourseScreen() {
               question: c.front,
               answer: c.back,
               orderIndex: i,
+              sourceQuote: c.quote,
             })),
           );
         }

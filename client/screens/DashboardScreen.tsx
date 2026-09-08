@@ -585,7 +585,7 @@ export default function DashboardScreen() {
         if (data.flashcards && data.flashcards.length > 0) {
           await storage.saveFlashcards(
             topicId,
-            data.flashcards.map((c: any, i: number) => ({ question: c.front, answer: c.back, orderIndex: i })),
+            data.flashcards.map((c: any, i: number) => ({ question: c.front, answer: c.back, orderIndex: i, sourceQuote: c.quote })),
           );
         }
       }

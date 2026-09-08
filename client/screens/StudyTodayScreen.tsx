@@ -34,6 +34,7 @@ interface StudyCard {
   back: string;
   topicName: string;
   topicId: string;
+  sourceQuote?: string;
 }
 
 export default function StudyTodayScreen() {
@@ -69,6 +70,7 @@ export default function StudyTodayScreen() {
               back: fc.answer,
               topicName: topic.name,
               topicId: topic.id,
+              sourceQuote: fc.sourceQuote,
             });
           });
         }
@@ -355,6 +357,17 @@ export default function StudyTodayScreen() {
               <ThemedText type="h2" style={styles.cardText}>
                 {showAnswer ? currentCard.back : currentCard.front}
               </ThemedText>
+              {showAnswer && currentCard.sourceQuote ? (
+                <View style={[styles.sourceQuote, { borderTopColor: theme.border }]}>
+                  <ThemedText
+                    type="small"
+                    style={{ color: theme.textSecondary, fontStyle: "italic" }}
+                    numberOfLines={3}
+                  >
+                    {`"${currentCard.sourceQuote}"`}
+                  </ThemedText>
+                </View>
+              ) : null}
             </View>
 
             {!showAnswer ? (
@@ -472,6 +485,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingTop: Spacing.md,
+  },
+  sourceQuote: {
+    marginTop: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderTopWidth: 1,
+    maxWidth: "100%",
   },
   answerButtons: {
     flexDirection: "row",

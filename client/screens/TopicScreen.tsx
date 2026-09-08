@@ -276,7 +276,7 @@ export default function TopicScreen() {
       if (flashcardsRes.status === "fulfilled" && flashcardsRes.value.ok) {
         const data = await flashcardsRes.value.json();
         if (data.flashcards && data.flashcards.length > 0) {
-          await storage.saveFlashcards(targetTopicId, data.flashcards.map((c: any, i: number) => ({ question: c.front, answer: c.back, orderIndex: i })));
+          await storage.saveFlashcards(targetTopicId, data.flashcards.map((c: any, i: number) => ({ question: c.front, answer: c.back, orderIndex: i, sourceQuote: c.quote })));
           generated++;
         }
       }
