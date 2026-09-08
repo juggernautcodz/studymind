@@ -476,6 +476,25 @@ export default function MindmapScreen() {
                   </>
                 ) : null}
 
+                {!linkedTopic ? (
+                  <View
+                    style={[
+                      styles.conceptNotice,
+                      { backgroundColor: theme.backgroundSecondary },
+                    ]}
+                  >
+                    <Icon name="info" size={14} color={theme.textSecondary} />
+                    <ThemedText
+                      type="small"
+                      style={{ color: theme.textSecondary, flex: 1 }}
+                    >
+                      This is an outline note, not a real Topic — it has no
+                      notes, flashcards, or quiz of its own. Create a Topic
+                      in Course view to study this separately.
+                    </ThemedText>
+                  </View>
+                ) : null}
+
                 <Button
                   onPress={() => {
                     setSelectedParentId(selectedNode.id);
@@ -493,7 +512,7 @@ export default function MindmapScreen() {
                     />
                   }
                 >
-                  Add Subtopic
+                  Add Concept
                 </Button>
 
                         <Button
@@ -758,6 +777,13 @@ const styles = StyleSheet.create({
   },
   drawerActions: {
     gap: Spacing.md,
+  },
+  conceptNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
   },
   quickActionRow: {
     flexDirection: "row",
