@@ -52,6 +52,7 @@ import type {
   Flashcard,
   Quiz,
   QuizQuestion,
+  QuizAttempt,
 } from "@/types";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -106,15 +107,18 @@ export default function CourseScreen() {
     quiz: Quiz;
     questions: QuizQuestion[];
   } | null>(null);
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
 
   const loadData = useCallback(async () => {
     try {
-      const [loadedCourse, loadedTopics] = await Promise.all([
+      const [loadedCourse, loadedTopics, loadedQuizAttempts] = await Promise.all([
         storage.getCourse(courseId),
         storage.getTopicsByCourse(courseId),
+        storage.getQuizAttemptsByCourse(courseId),
       ]);
       setCourse(loadedCourse);
       setTopics(loadedTopics);
+      setQuizAttempts(loadedQuizAttempts);
 
       const topicIds = loadedTopics.map((t) => t.id);
       if (topicIds.length > 0) {
@@ -857,6 +861,58 @@ export default function CourseScreen() {
         }
       : null;
 
+  const completedTopicsCount = topics.filter((t) => t.status === "completed").length;
+  const passedTopicIds = new Set(
+    quizAttempts.filter((a) => a.passed).map((a) => a.topicId),
+  );
+  const quizAccuracy =
+    quizAttempts.length > 0
+      ? Math.round(
+          (quizAttempts.reduce((sum, a) => sum + a.score / a.totalQuestions, 0) /
+            quizAttempts.length) *
+            100,
+        )
+      : null;
+
+  const renderProgressCard = () => {
+    if (topics.length === 0) return null;
+    return (
+      <View
+        style={[
+          styles.progressCard,
+          { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+        ]}
+      >
+        <View style={styles.progressStat}>
+          <ThemedText type="h3" style={{ color: theme.text }}>
+            {completedTopicsCount}/{topics.length}
+          </ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            Topics done
+          </ThemedText>
+        </View>
+        <View style={[styles.progressDivider, { backgroundColor: theme.border }]} />
+        <View style={styles.progressStat}>
+          <ThemedText type="h3" style={{ color: theme.text }}>
+            {quizAccuracy !== null ? `${quizAccuracy}%` : "—"}
+          </ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            Quiz accuracy
+          </ThemedText>
+        </View>
+        <View style={[styles.progressDivider, { backgroundColor: theme.border }]} />
+        <View style={styles.progressStat}>
+          <ThemedText type="h3" style={{ color: theme.text }}>
+            {passedTopicIds.size}
+          </ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            Quizzes passed
+          </ThemedText>
+        </View>
+      </View>
+    );
+  };
+
   const contentActions = [
     {
       label: "Record",
@@ -1111,6 +1167,8 @@ export default function CourseScreen() {
           },
         ]}
       >
+        <View style={{ paddingHorizontal: Spacing.lg }}>{renderProgressCard()}</View>
+
         <View style={[styles.quickActionsContainer, { paddingHorizontal: Spacing.lg }]}>
           <ThemedText
             type="caption"
@@ -1375,6 +1433,22 @@ const styles = StyleSheet.create({
   },
   headerContent: {
     zIndex: 1,
+  },
+  progressCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  progressStat: {
+    flex: 1,
+    alignItems: "center",
+  },
+  progressDivider: {
+    width: 1,
+    height: 32,
   },
   quickActionsContainer: {
     marginBottom: Spacing.md,

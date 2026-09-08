@@ -83,6 +83,7 @@ export default function DashboardScreen() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [totalFlashcardCount, setTotalFlashcardCount] = useState(0);
   const [dueFlashcardCount, setDueFlashcardCount] = useState<number | null>(null);
+  const [weeklyActivityCount, setWeeklyActivityCount] = useState(0);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
 
   const isMounted = useRef(true);
@@ -140,6 +141,20 @@ export default function DashboardScreen() {
       );
       setCourses(loadedCourses);
       setTopics(loadedTopics);
+
+      try {
+        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const [quizAttempts, examAttempts] = await Promise.all([
+          storage.getQuizAttempts(),
+          storage.getExamAttempts(),
+        ]);
+        const recentCount =
+          quizAttempts.filter((a) => new Date(a.completedAt).getTime() >= weekAgo).length +
+          examAttempts.filter((a) => new Date(a.completedAt).getTime() >= weekAgo).length;
+        if (isMounted.current) setWeeklyActivityCount(recentCount);
+      } catch {
+        if (isMounted.current) setWeeklyActivityCount(0);
+      }
 
       const currentLoadId = ++flashcardLoadId.current;
       let cardCount = 0;
@@ -1080,6 +1095,7 @@ export default function DashboardScreen() {
       { icon: "check-circle", value: completedTopics.length, label: "Completed", color: "#10B981" },
       { icon: "layers", value: totalFlashcardCount, label: "Flashcards", color: "#F59E0B" },
       { icon: "book", value: courses.length, label: "Courses", color: "#3B82F6" },
+      { icon: "activity", value: weeklyActivityCount, label: "This Week", color: "#06B6D4" },
     ];
 
     return (
