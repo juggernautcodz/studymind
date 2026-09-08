@@ -1,6 +1,6 @@
 import { getApiUrl } from "./query-client";
 import { storage } from "./storage";
-import type { Topic } from "@/types";
+import type { Topic, Semester, Course } from "@/types";
 
 async function getHeaders(
   authToken: string | null,
@@ -162,6 +162,71 @@ export async function syncTopicToServer(
   } catch (error) {
     console.error("[ServerSync] Server sync error:", error);
     return null;
+  }
+}
+
+// Local storage is per-device (see storage.ts) and only ever pushed to the
+// server, never pulled — so a second device signing into the same account
+// saw an empty local store and independently created its own "My Studies"
+// default setup, duplicating whatever the first device already made. Call
+// this on login/session-restore, before anything else reads local storage,
+// to pull down existing content first.
+export async function hydrateFromServerIfEmpty(
+  authToken: string | null,
+): Promise<void> {
+  if (await storage.hasContent()) return;
+
+  try {
+    const apiUrl = getApiUrl().replace(/\/+$/, "");
+    const headers = await getHeaders(authToken);
+
+    const [semestersRes, coursesRes, topicsRes] = await Promise.all([
+      fetch(`${apiUrl}/api/semesters`, { headers }),
+      fetch(`${apiUrl}/api/courses`, { headers }),
+      fetch(`${apiUrl}/api/topics`, { headers }),
+    ]);
+
+    if (!semestersRes.ok || !coursesRes.ok || !topicsRes.ok) return;
+
+    const semestersData = await parseJsonSafe(semestersRes);
+    const coursesData = await parseJsonSafe(coursesRes);
+    const topicsData = await parseJsonSafe(topicsRes);
+
+    const rawSemesters: any[] = semestersData?.semesters || [];
+    if (rawSemesters.length === 0) return;
+
+    const semesters: Semester[] = rawSemesters.map((s) => ({
+      id: s.id,
+      userId: s.userId,
+      name: s.name,
+      startDate: s.startDate || "",
+      endDate: s.endDate || "",
+      createdAt: s.createdAt,
+    }));
+
+    const courses: Course[] = (coursesData?.courses || []).map((c: any) => ({
+      id: c.id,
+      userId: c.userId,
+      semesterId: c.semesterId,
+      name: c.name,
+      code: c.code || "",
+      color: c.color || "#4F46E5",
+      createdAt: c.createdAt,
+    }));
+
+    const topics: Topic[] = (topicsData?.topics || []).map((t: any) => ({
+      id: t.id,
+      userId: t.userId,
+      courseId: t.courseId,
+      name: t.name,
+      orderIndex: t.orderIndex ?? 0,
+      status: t.status || "pending",
+      createdAt: t.createdAt,
+    }));
+
+    await storage.hydrateFromServer({ semesters, courses, topics });
+  } catch (error) {
+    console.error("[ServerSync] Failed to hydrate from server:", error);
   }
 }
 

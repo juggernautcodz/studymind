@@ -8,6 +8,7 @@ import React, {
 import { storage, setActiveUser } from "@/lib/storage";
 import { getApiUrl, setAuthExpiredCallback, clearAuthExpiredCallback, queryClient } from "@/lib/query-client";
 import { registerPushTokenWithServer } from "@/lib/notifications";
+import { hydrateFromServerIfEmpty } from "@/lib/serverSync";
 import type { User } from "@/types";
 
 interface AuthContextType {
@@ -71,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             setActiveUser(loadedUser.id);
             await storage.setUser(loadedUser);
+            await hydrateFromServerIfEmpty(token);
             setUser(loadedUser);
           } else {
             setActiveUser(null);
@@ -130,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveUser(loggedInUser.id);
     await storage.setUser(loggedInUser);
     await storage.setAuthToken(data.token);
+    await hydrateFromServerIfEmpty(data.token);
     // staleTime: Infinity means cached queries never self-refetch — without
     // clearing here, a different account's data can keep showing after
     // switching who's logged in on the same device.
@@ -198,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveUser(user.id);
     await storage.setUser(user);
     await storage.setAuthToken(token);
+    await hydrateFromServerIfEmpty(token);
     queryClient.clear();
     setUser(user);
     registerPushTokenWithServer(token).catch(() => {});

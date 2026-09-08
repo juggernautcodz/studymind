@@ -104,6 +104,24 @@ export const storage = {
     return getItems<Semester>(KEYS.SEMESTERS);
   },
 
+  async hasContent(): Promise<boolean> {
+    const semesters = await this.getSemesters();
+    return semesters.length > 0;
+  },
+
+  // Only called when this device's local storage is empty for the active
+  // user, to pull down content already created on another device — never
+  // overwrites existing local data.
+  async hydrateFromServer(data: {
+    semesters: Semester[];
+    courses: Course[];
+    topics: Topic[];
+  }): Promise<void> {
+    await setItems(KEYS.SEMESTERS, data.semesters);
+    await setItems(KEYS.COURSES, data.courses);
+    await setItems(KEYS.TOPICS, data.topics);
+  },
+
   async createSemester(
     data: Omit<Semester, "id" | "createdAt">,
   ): Promise<Semester> {
