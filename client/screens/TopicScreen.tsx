@@ -101,6 +101,7 @@ export default function TopicScreen() {
       setTopicNotes(notes);
       setTopicFlashcards(flashcards);
       setTopicQuizData(quizData);
+      storage.recordTopicVisit(topicId).catch(() => {});
     } finally {
       setIsLoading(false);
     }

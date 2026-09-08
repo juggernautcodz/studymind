@@ -35,6 +35,7 @@ const KEYS = {
   AUTH_TOKEN: "studymind_auth_token",
   QUIZ_ATTEMPTS: "studymind_quiz_attempts",
   EXAM_ATTEMPTS: "studymind_exam_attempts",
+  RECENT_TOPICS: "studymind_recent_topics",
 };
 
 // USER/AUTH_TOKEN describe "who's currently signed in on this device" and
@@ -484,6 +485,16 @@ export const storage = {
 
   async getAllQuizzes(): Promise<Quiz[]> {
     return getItems<Quiz>(KEYS.QUIZZES);
+  },
+
+  async getRecentTopicIds(): Promise<string[]> {
+    return (await getItem<string[]>(KEYS.RECENT_TOPICS)) || [];
+  },
+
+  async recordTopicVisit(topicId: string): Promise<void> {
+    const ids = await this.getRecentTopicIds();
+    const next = [topicId, ...ids.filter((id) => id !== topicId)].slice(0, 20);
+    await setItem(KEYS.RECENT_TOPICS, next);
   },
 
   async saveFlashcards(

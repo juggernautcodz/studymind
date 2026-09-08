@@ -84,6 +84,7 @@ export default function DashboardScreen() {
   const [totalFlashcardCount, setTotalFlashcardCount] = useState(0);
   const [dueFlashcardCount, setDueFlashcardCount] = useState<number | null>(null);
   const [weeklyActivityCount, setWeeklyActivityCount] = useState(0);
+  const [recentTopicIds, setRecentTopicIds] = useState<string[]>([]);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
 
   const isMounted = useRef(true);
@@ -141,6 +142,13 @@ export default function DashboardScreen() {
       );
       setCourses(loadedCourses);
       setTopics(loadedTopics);
+
+      storage
+        .getRecentTopicIds()
+        .then((ids) => {
+          if (isMounted.current) setRecentTopicIds(ids);
+        })
+        .catch(() => {});
 
       try {
         const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -1148,12 +1156,18 @@ export default function DashboardScreen() {
     return course ? course.name : "";
   };
 
-  const recentTopics = useMemo(() =>
-    [...topics]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5),
-    [topics],
-  );
+  const recentTopics = useMemo(() => {
+    const byCreatedDesc = [...topics].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+    const topicById = new Map(topics.map((t) => [t.id, t]));
+    const visited = recentTopicIds
+      .map((id) => topicById.get(id))
+      .filter((t): t is Topic => !!t);
+    const visitedIds = new Set(visited.map((t) => t.id));
+    const unvisited = byCreatedDesc.filter((t) => !visitedIds.has(t.id));
+    return [...visited, ...unvisited].slice(0, 5);
+  }, [topics, recentTopicIds]);
 
   const renderRecentTopics = () => {
     if (recentTopics.length === 0) return null;
