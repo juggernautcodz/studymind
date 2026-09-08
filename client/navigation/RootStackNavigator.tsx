@@ -13,6 +13,7 @@ import BillingScreen from "@/screens/BillingScreen";
 import StudyTodayScreen from "@/screens/StudyTodayScreen";
 import ExamModeScreen from "@/screens/ExamModeScreen";
 import SearchScreen from "@/screens/SearchScreen";
+import LibraryScreen from "@/screens/LibraryScreen";
 import TopicScreen from "@/screens/TopicScreen";
 import WritingLabScreen from "@/screens/WritingLabScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
@@ -34,6 +35,7 @@ export type RootStackParamList = {
   StudyToday: undefined;
   ExamMode: undefined;
   Search: undefined;
+  Library: undefined;
   WritingLab: {
     initialMode?: "essay" | "rewrite" | "clean";
     initialText?: string;
@@ -140,6 +142,11 @@ export default function RootStackNavigator() {
               headerTitle: "Search",
               presentation: "modal",
             }}
+          />
+          <Stack.Screen
+            name="Library"
+            component={LibraryScreen}
+            options={{ headerTitle: "Library" }}
           />
           <Stack.Screen
             name="WritingLab"

@@ -1008,6 +1008,7 @@ export default function DashboardScreen() {
   const studyActions = [
     { label: "Study", icon: "book-open" as const, color: theme.success, onPress: () => navigation.navigate("StudyToday"), testID: "button-study" },
     { label: "Exam", icon: "award" as const, color: theme.warning, onPress: () => navigation.navigate("ExamMode"), testID: "button-exam" },
+    { label: "Library", icon: "folder" as const, color: "#F59E0B", onPress: () => navigation.navigate("Library"), testID: "button-library" },
     { label: "Mind Map", icon: "share-2" as const, color: "#06B6D4", onPress: handleMindMap, testID: "button-mindmap" },
     { label: "Search", icon: "search" as const, color: theme.info, onPress: () => navigation.navigate("Search"), testID: "button-search" },
     { label: "Write", icon: "edit-3" as const, color: "#EC4899", onPress: () => navigation.navigate("WritingLab"), testID: "button-write" },

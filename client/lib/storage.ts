@@ -478,6 +478,14 @@ export const storage = {
     return getItems<Flashcard>(KEYS.FLASHCARDS);
   },
 
+  async getAllNotes(): Promise<Notes[]> {
+    return getItems<Notes>(KEYS.NOTES);
+  },
+
+  async getAllQuizzes(): Promise<Quiz[]> {
+    return getItems<Quiz>(KEYS.QUIZZES);
+  },
+
   async saveFlashcards(
     topicId: string,
     cards: Omit<Flashcard, "id" | "topicId">[],
