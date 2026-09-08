@@ -12,6 +12,8 @@ import {
   setAudioModeAsync,
 } from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -77,6 +79,8 @@ export default function RecordScreen() {
     },
   );
   const [savedTranscript, setSavedTranscript] = useState<string>("");
+  const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
+  const [whiteboardPhotosAdded, setWhiteboardPhotosAdded] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const isProcessingRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -674,6 +678,126 @@ export default function RecordScreen() {
     }
   };
 
+  const compressImage = async (uri: string): Promise<string> => {
+    try {
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG },
+      );
+      return manipResult.uri;
+    } catch {
+      return uri;
+    }
+  };
+
+  const readImageAsBase64 = async (uri: string): Promise<string> => {
+    if (Platform.OS !== "web") {
+      return FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+    }
+    const resp = await fetch(uri);
+    const blob = await resp.blob();
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        resolve(dataUrl.split(",")[1] || "");
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  // Lets a single in-class session capture the whiteboard alongside the
+  // lecture audio — competitors assume you upload a file after the fact
+  // at a desk, so merging both sources into one topic in one continuous
+  // flow (instead of recording, leaving, then separately adding a photo
+  // from Course view) is the actual differentiator.
+  const handleAddWhiteboardPhoto = async () => {
+    if (isCapturingPhoto || state !== "choosing") return;
+
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      showToast({
+        type: "warning",
+        title: Platform.OS !== "web" ? "Permission needed" : "Not available",
+        message:
+          Platform.OS !== "web"
+            ? "Please allow camera access to capture the whiteboard."
+            : "Camera capture is not available on web.",
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    setIsCapturingPhoto(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const compressedUri = await compressImage(result.assets[0].uri);
+      const imageBase64 = await readImageAsBase64(compressedUri);
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(
+        new URL("/api/ai/ocr/extract", getApiUrl()).toString(),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          credentials: "include",
+          body: JSON.stringify({ imageBase64, topicId }),
+        },
+      );
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof errData.error === "string"
+            ? errData.error
+            : "OCR extraction failed",
+        );
+      }
+      const data = await response.json();
+      const ocrText: string = data.text || "";
+
+      if (ocrText.trim().length < 5) {
+        showToast({
+          type: "warning",
+          title: "No Text Found",
+          message: "Could not read any text from that photo.",
+        });
+        return;
+      }
+
+      await storage.saveWhiteboardImage({
+        topicId,
+        imagePath: result.assets[0].uri,
+        ocrText,
+      });
+      setSavedTranscript((prev) => `${prev}\n\n[Whiteboard]\n${ocrText}`);
+      setWhiteboardPhotosAdded((n) => n + 1);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({
+        type: "success",
+        title: "Whiteboard added",
+        message: "It'll be included when you generate study materials.",
+      });
+    } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast({
+        type: "error",
+        title: "Error",
+        message: error?.message || "Failed to process the photo.",
+      });
+    } finally {
+      setIsCapturingPhoto(false);
+    }
+  };
+
   const handleDone = () => {
     navigation.goBack();
   };
@@ -1161,6 +1285,26 @@ export default function RecordScreen() {
               </Pressable>
             </Card>
 
+            <Pressable
+              onPress={handleAddWhiteboardPhoto}
+              disabled={isCapturingPhoto}
+              style={[
+                styles.whiteboardButton,
+                { borderColor: theme.border, opacity: isCapturingPhoto ? 0.6 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Add whiteboard photo"
+            >
+              <Icon name="camera" size={18} color={theme.link} />
+              <ThemedText type="body" style={{ color: theme.link, fontWeight: "600" }}>
+                {isCapturingPhoto
+                  ? "Reading photo..."
+                  : whiteboardPhotosAdded > 0
+                    ? `Add Another Whiteboard Photo (${whiteboardPhotosAdded} added)`
+                    : "+ Add Whiteboard Photo"}
+              </ThemedText>
+            </Pressable>
+
             <View style={styles.completedActions}>
               <Button onPress={generateSelectedMaterials} size="lg" fullWidth>
                 Generate Selected Materials
@@ -1461,6 +1605,18 @@ const styles = StyleSheet.create({
   },
   completedActions: {
     width: "100%",
+  },
+  whiteboardButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    width: "100%",
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderRadius: BorderRadius.md,
   },
   secondaryButton: {
     marginTop: Spacing.md,
