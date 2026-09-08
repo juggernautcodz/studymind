@@ -23,6 +23,7 @@ import { Badge } from "@/components/Badge";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { useTheme } from "@/hooks/useTheme";
+import { useBilling } from "@/contexts/BillingContext";
 import { storage } from "@/lib/storage";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type {
@@ -59,6 +60,7 @@ type ScreenMode = "overview" | "quiz" | "quiz-result" | "exam" | "exam-result";
 export default function ExamModeScreen() {
   const { theme } = useTheme();
   const { showToast } = useToast();
+  const { isFeatureAvailable } = useBilling();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -321,6 +323,31 @@ export default function ExamModeScreen() {
 
   if (isLoading) {
     return <LoadingState fullScreen message="Loading your progress..." />;
+  }
+
+  if (!isFeatureAvailable("hasExamMode")) {
+    return (
+      <ThemedView style={styles.container}>
+        <View
+          style={[
+            styles.emptyContainer,
+            {
+              paddingTop: headerHeight + Spacing["2xl"],
+              paddingBottom: insets.bottom + Spacing["2xl"],
+            },
+          ]}
+        >
+          <EmptyState
+            icon="award"
+            iconColor={theme.warning}
+            title="Exam Mode is a PRO feature"
+            description="Combine quizzes from an entire course into one timed exam with a letter grade and analytics — the one thing neither StudySmarter nor NotebookLM offers. Upgrade to unlock it."
+            buttonLabel="Upgrade to PRO"
+            onButtonPress={() => navigation.navigate("Billing")}
+          />
+        </View>
+      </ThemedView>
+    );
   }
 
   if (screenMode === "overview") {
