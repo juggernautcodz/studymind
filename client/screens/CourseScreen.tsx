@@ -1170,6 +1170,19 @@ export default function CourseScreen() {
       >
         <View style={{ paddingHorizontal: Spacing.lg }}>{renderProgressCard()}</View>
 
+        <View style={{ paddingHorizontal: Spacing.lg, marginBottom: Spacing.md }}>
+          <Button
+            variant="secondary"
+            fullWidth
+            onPress={() => navigation.navigate("CourseBrain", { courseId })}
+            icon={<Icon name="book-open" size={18} color={theme.link} />}
+            accessibilityHint="View this course's study summary"
+            testID="button-course-brain"
+          >
+            Open Course Brain
+          </Button>
+        </View>
+
         <View style={[styles.quickActionsContainer, { paddingHorizontal: Spacing.lg }]}>
           <ThemedText
             type="caption"

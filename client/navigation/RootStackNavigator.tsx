@@ -16,6 +16,7 @@ import SearchScreen from "@/screens/SearchScreen";
 import LibraryScreen from "@/screens/LibraryScreen";
 import TopicScreen from "@/screens/TopicScreen";
 import WritingLabScreen from "@/screens/WritingLabScreen";
+import CourseBrainScreen from "@/screens/CourseBrainScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemedText } from "@/components/ThemedText";
@@ -28,6 +29,7 @@ export type RootStackParamList = {
   Main: undefined;
   Semester: { semesterId: string };
   Course: { courseId: string };
+  CourseBrain: { courseId: string };
   Topic: { topicId: string; courseId: string };
   Record: { topicId: string };
   Mindmap: { courseId: string };
@@ -98,6 +100,11 @@ export default function RootStackNavigator() {
             name="Course"
             component={CourseScreen}
             options={{ headerTitle: "Course" }}
+          />
+          <Stack.Screen
+            name="CourseBrain"
+            component={CourseBrainScreen}
+            options={{ headerTitle: "Course Brain" }}
           />
           <Stack.Screen
             name="Topic"

@@ -24,6 +24,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   try {
+    const courseBrainRoutes = (await import("./course-brain")).default;
+    safeMount(app, "/api/courses", courseBrainRoutes, "course brain");
+  } catch (err) {
+    console.warn("Failed to load course brain routes:", err);
+  }
+
+  try {
     const authRoutes = (await import("./auth")).default;
     safeMount(app, "/api/auth", authRoutes, "auth");
   } catch (err) {
