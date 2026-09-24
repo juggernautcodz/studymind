@@ -343,13 +343,14 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const { topicId, durationMinutes = 5, audioBase64 } = req.body;
+      const userId = req.user?.id ?? ANONYMOUS_USER_ID;
 
       if (!topicId) {
         return res.status(400).json({ error: "topicId is required" });
       }
 
       const topic = await prisma.topic.findFirst({
-        where: { id: topicId, userId: req.user?.id ?? ANONYMOUS_USER_ID },
+        where: { id: topicId, userId },
       });
 
       if (!topic) {
@@ -358,6 +359,7 @@ router.post(
 
       const job = await prisma.job.create({
         data: {
+          userId,
           type: "transcription",
           status: "processing",
           input: JSON.stringify({ topicId, durationMinutes }),
@@ -381,10 +383,14 @@ router.post(
               ];
           }
 
-          await prisma.topic.update({
-            where: { id: topicId },
+          const topicUpdate = await prisma.topic.updateMany({
+            where: { id: topicId, userId },
             data: { transcript },
           });
+
+          if (topicUpdate.count === 0) {
+            throw new Error("Topic is no longer available");
+          }
 
           await prisma.job.update({
             where: { id: job.id },
@@ -394,16 +400,8 @@ router.post(
             },
           });
 
-          await incrementUsage(
-            req.user?.id ?? ANONYMOUS_USER_ID,
-            "transcription",
-            durationMinutes,
-          );
-          await incrementUsage(
-            req.user?.id ?? ANONYMOUS_USER_ID,
-            "recording",
-            1,
-          );
+          await incrementUsage(userId, "transcription", durationMinutes);
+          await incrementUsage(userId, "recording", 1);
         } catch (error) {
           console.error("Transcription processing error:", error);
           await prisma.job.update({
