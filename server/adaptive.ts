@@ -12,6 +12,18 @@ router.post(
       const id = req.params.id as string;
       const { correct } = req.body;
 
+      const flashcard = await prisma.flashcard.findFirst({
+        where: {
+          id,
+          topic: { userId: req.user!.id },
+        },
+        select: { id: true },
+      });
+
+      if (!flashcard) {
+        return res.status(404).json({ error: "Flashcard not found" });
+      }
+
       let stat = await prisma.flashcardStat.findUnique({
         where: {
           userId_flashcardId: {
@@ -79,6 +91,9 @@ router.get(
         where: {
           userId: req.user!.id,
           nextReview: { lte: now },
+          flashcard: {
+            topic: { userId: req.user!.id },
+          },
         },
         include: {
           flashcard: {
@@ -95,6 +110,9 @@ router.get(
         where: {
           userId: req.user!.id,
           timesWrong: { gt: 0 },
+          flashcard: {
+            topic: { userId: req.user!.id },
+          },
         },
         include: {
           flashcard: {
