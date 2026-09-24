@@ -16,7 +16,7 @@
         "NSPhotoLibraryUsageDescription": "StudyMind needs photo library access to import images of notes and textbook pages for OCR text extraction.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "6"
+      "buildNumber": "8"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +27,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "package": "com.studymind.app",
-      "versionCode": 21,
+      "versionCode": 23,
       "permissions": [
         "RECORD_AUDIO",
         "CAMERA",
