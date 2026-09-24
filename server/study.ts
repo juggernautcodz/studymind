@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import prisma from "./db";
 import { guestOrAuthMiddleware, AuthRequest } from "./auth";
 import { ANONYMOUS_USER_ID } from "./constants";
+import { notFound } from "./lib/errors";
 
 const router = Router();
 
@@ -169,6 +170,15 @@ router.post(
           }
           return res.json({ semester: existing });
         }
+
+        const conflicting = await prisma.semester.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+
+        if (conflicting) {
+          return notFound(res, "Semester not found");
+        }
       }
 
       const semester = await prisma.semester.create({
@@ -250,6 +260,24 @@ router.post(
           }
           return res.json({ course: existing });
         }
+
+        const conflicting = await prisma.course.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+
+        if (conflicting) {
+          return notFound(res, "Course not found");
+        }
+      }
+
+      const semester = await prisma.semester.findFirst({
+        where: { id: semesterId, userId },
+        select: { id: true },
+      });
+
+      if (!semester) {
+        return notFound(res, "Semester not found");
       }
 
       const course = await prisma.course.create({
@@ -327,10 +355,28 @@ router.post(
           }
           return res.json({ topic: existing });
         }
+
+        const conflicting = await prisma.topic.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+
+        if (conflicting) {
+          return notFound(res, "Topic not found");
+        }
+      }
+
+      const course = await prisma.course.findFirst({
+        where: { id: courseId, userId },
+        select: { id: true },
+      });
+
+      if (!course) {
+        return notFound(res, "Course not found");
       }
 
       const maxOrder = await prisma.topic.findFirst({
-        where: { courseId },
+        where: { courseId, userId },
         orderBy: { orderIndex: "desc" },
         select: { orderIndex: true },
       });
