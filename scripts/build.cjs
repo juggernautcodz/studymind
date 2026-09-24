@@ -59,17 +59,7 @@ function main() {
   }
   console.log("");
 
-  console.log("Step 2: Prisma db push (sync schema to Postgres)");
-  try {
-    execSync("npx prisma db push --accept-data-loss", { stdio: "inherit", timeout: 60_000 });
-    console.log("Prisma db push complete");
-  } catch (error) {
-    console.error("Prisma db push failed:", error.message);
-    process.exit(1);
-  }
-  console.log("");
-
-  console.log("Step 3: Expo web export");
+  console.log("Step 2: Expo web export");
   const domain = process.env.REPLIT_DEPLOYMENT_URL
     || process.env.REPLIT_DEV_DOMAIN
     || (process.env.REPL_SLUG && process.env.REPL_OWNER
@@ -109,7 +99,7 @@ function main() {
   console.log(`Expo web export complete: ${files.length} files in dist/`);
   console.log("");
 
-  console.log("Step 4: Server build");
+  console.log("Step 3: Server build");
   try {
     execSync("npm run server:build", { stdio: "inherit", timeout: 60_000 });
   } catch (error) {

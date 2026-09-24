@@ -1996,135 +1996,6 @@ var init_billing = __esm({
   }
 });
 
-// server/middleware.ts
-var checkUsageLimits, incrementUsage2;
-var init_middleware = __esm({
-  "server/middleware.ts"() {
-    "use strict";
-    init_db();
-    init_billing();
-    init_constants();
-    checkUsageLimits = (feature) => {
-      return async (req, res, next) => {
-        if (!req.user) {
-          return res.status(401).json({ error: "Authentication required" });
-        }
-        if (req.user.id === ANONYMOUS_USER_ID) {
-          return next();
-        }
-        try {
-          const entitlement = await db_default.entitlement.findUnique({
-            where: { userId: req.user.id }
-          });
-          const plan = entitlement?.plan || "FREE";
-          const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.FREE;
-          switch (feature) {
-            case "recording": {
-              if (limits.maxRecordingsLifetime === -1) break;
-              const usage = await getUsageInfo(req.user.id);
-              if (usage.recordingsCount >= limits.maxRecordingsLifetime) {
-                return res.status(403).json({
-                  type: "PAYWALL_REQUIRED",
-                  error: "Recording limit reached",
-                  upgradeRequired: true,
-                  message: `You've reached the limit of ${limits.maxRecordingsLifetime} recordings. Upgrade to continue.`
-                });
-              }
-              break;
-            }
-            case "transcription": {
-              if (limits.maxTranscriptionMinutesPerMonth === -1) break;
-              const usage = await getUsageInfo(req.user.id);
-              if (usage.transcriptionMinutesUsed >= limits.maxTranscriptionMinutesPerMonth) {
-                return res.status(403).json({
-                  type: "PAYWALL_REQUIRED",
-                  error: "Transcription limit reached",
-                  upgradeRequired: true,
-                  message: `You've used all ${limits.maxTranscriptionMinutesPerMonth} transcription minutes this month. Upgrade for more.`
-                });
-              }
-              break;
-            }
-            case "quiz":
-              if (!limits.hasQuizzes) {
-                return res.status(403).json({
-                  error: "Feature not available",
-                  upgradeRequired: true,
-                  message: "Quiz generation is a PRO feature. Upgrade to access it!"
-                });
-              }
-              break;
-            case "adaptive":
-              if (!limits.hasAdaptiveReview) {
-                return res.status(403).json({
-                  error: "Feature not available",
-                  upgradeRequired: true,
-                  message: "Adaptive study is a PRO feature. Upgrade to access it!"
-                });
-              }
-              break;
-            case "exam":
-              if (!limits.hasExamMode) {
-                return res.status(403).json({
-                  error: "Feature not available",
-                  upgradeRequired: true,
-                  message: "Exam mode is a PRO feature. Upgrade to access it!"
-                });
-              }
-              break;
-            case "export":
-              if (!limits.hasExport) {
-                return res.status(403).json({
-                  error: "Feature not available",
-                  upgradeRequired: true,
-                  message: "Export is a PRO feature. Upgrade to access it!"
-                });
-              }
-              break;
-          }
-          next();
-        } catch (error) {
-          console.error("Usage limit check error:", error);
-          next();
-        }
-      };
-    };
-    incrementUsage2 = async (userId, type, amount = 1) => {
-      try {
-        if (userId === ANONYMOUS_USER_ID) return;
-        const monthKey = (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
-        const existing = await db_default.usage.findFirst({
-          where: { userId, monthKey }
-        });
-        if (existing) {
-          if (type === "recording") {
-            await db_default.usage.update({
-              where: { id: existing.id },
-              data: { recordingsCount: { increment: amount } }
-            });
-          } else if (type === "transcription") {
-            await db_default.usage.update({
-              where: { id: existing.id },
-              data: { transcriptionMinutesUsed: { increment: amount } }
-            });
-          }
-        } else {
-          await db_default.usage.create({
-            data: {
-              userId,
-              monthKey,
-              recordingsCount: type === "recording" ? amount : 0,
-              transcriptionMinutesUsed: type === "transcription" ? amount : 0
-            }
-          });
-        }
-      } catch (error) {
-        console.error("Increment usage error:", error);
-      }
-    };
-  }
-});
-
 // server/adaptive.ts
 var adaptive_exports = {};
 __export(adaptive_exports, {
@@ -2137,7 +2008,6 @@ var init_adaptive = __esm({
     "use strict";
     init_db();
     init_auth();
-    init_middleware();
     router4 = Router4();
     router4.post(
       "/flashcards/:id/answer",
@@ -2198,7 +2068,6 @@ var init_adaptive = __esm({
     router4.get(
       "/study-today",
       authMiddleware,
-      checkUsageLimits("adaptive"),
       async (req, res) => {
         try {
           const now = /* @__PURE__ */ new Date();
@@ -2352,6 +2221,110 @@ var init_adaptive = __esm({
       }
     );
     adaptive_default = router4;
+  }
+});
+
+// server/middleware.ts
+var checkUsageLimits, incrementUsage2;
+var init_middleware = __esm({
+  "server/middleware.ts"() {
+    "use strict";
+    init_db();
+    init_billing();
+    init_constants();
+    checkUsageLimits = (feature) => {
+      return async (req, res, next) => {
+        if (!req.user) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
+        if (req.user.id === ANONYMOUS_USER_ID) {
+          return next();
+        }
+        try {
+          const entitlement = await db_default.entitlement.findUnique({
+            where: { userId: req.user.id }
+          });
+          const plan = entitlement?.plan || "FREE";
+          const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.FREE;
+          switch (feature) {
+            case "recording": {
+              if (limits.maxRecordingsLifetime === -1) break;
+              const usage = await getUsageInfo(req.user.id);
+              if (usage.recordingsCount >= limits.maxRecordingsLifetime) {
+                return res.status(403).json({
+                  type: "PAYWALL_REQUIRED",
+                  error: "Recording limit reached",
+                  upgradeRequired: true,
+                  message: `You've reached the limit of ${limits.maxRecordingsLifetime} recordings. Upgrade to continue.`
+                });
+              }
+              break;
+            }
+            case "transcription": {
+              if (limits.maxTranscriptionMinutesPerMonth === -1) break;
+              const usage = await getUsageInfo(req.user.id);
+              if (usage.transcriptionMinutesUsed >= limits.maxTranscriptionMinutesPerMonth) {
+                return res.status(403).json({
+                  type: "PAYWALL_REQUIRED",
+                  error: "Transcription limit reached",
+                  upgradeRequired: true,
+                  message: `You've used all ${limits.maxTranscriptionMinutesPerMonth} transcription minutes this month. Upgrade for more.`
+                });
+              }
+              break;
+            }
+            case "quiz":
+              if (!limits.hasQuizzes) {
+                return res.status(403).json({
+                  error: "Feature not available",
+                  upgradeRequired: true,
+                  message: "Quiz generation is a PRO feature. Upgrade to access it!"
+                });
+              }
+              break;
+            case "adaptive":
+              if (!limits.hasAdaptiveReview) {
+                return res.status(403).json({
+                  error: "Feature not available",
+                  upgradeRequired: true,
+                  message: "Adaptive study is a PRO feature. Upgrade to access it!"
+                });
+              }
+              break;
+            case "exam":
+              if (!limits.hasExamMode) {
+                return res.status(403).json({
+                  error: "Feature not available",
+                  upgradeRequired: true,
+                  message: "Exam mode is a PRO feature. Upgrade to access it!"
+                });
+              }
+              break;
+            case "export":
+              if (!limits.hasExport) {
+                return res.status(403).json({
+                  error: "Feature not available",
+                  upgradeRequired: true,
+                  message: "Export is a PRO feature. Upgrade to access it!"
+                });
+              }
+              break;
+          }
+          next();
+        } catch (error) {
+          console.error("Usage limit check error:", error);
+          next();
+        }
+      };
+    };
+    incrementUsage2 = async (userId, type, amount = 1) => {
+      try {
+        if (userId === ANONYMOUS_USER_ID) return;
+        await incrementUsage(userId, type, amount);
+      } catch (error) {
+        console.error("Increment usage error:", error);
+      }
+    };
   }
 });
 
@@ -3965,11 +3938,15 @@ This content covers essential material for understanding the subject. Focus on t
                 messages: [
                   {
                     role: "system",
-                    content: `You are a study assistant creating flashcards from notes. Generate 5-10 flashcards that cover the key concepts. Return as JSON array with "front" (question) and "back" (answer) fields. Focus on:
+                    content: `You are a study assistant creating flashcards from notes. Generate 5-10 flashcards that cover the key concepts. Return as JSON array with "front" (question), "back" (answer), and "quote" fields. Focus on:
 - Key definitions and terms
-- Important concepts and their explanations  
+- Important concepts and their explanations
 - Cause and effect relationships
 - Comparisons between concepts
+
+"quote" must be copied verbatim (word-for-word, no paraphrasing) from the
+source text below \u2014 the exact sentence or short passage that "back" is
+based on, so the student can see where the answer came from.
 
 Return ONLY valid JSON array, no markdown.`
                   },
@@ -3983,6 +3960,14 @@ Return ONLY valid JSON array, no markdown.`
               const content = response.choices[0]?.message?.content || "[]";
               const cleaned = content.replace(/```json\n?|\n?```/g, "").trim();
               flashcards = JSON.parse(cleaned);
+              const normalize = (s) => s.replace(/\s+/g, " ").trim().toLowerCase();
+              const normalizedText = normalize(text);
+              flashcards = flashcards.map((card) => {
+                if (card.quote && normalizedText.includes(normalize(card.quote))) {
+                  return card;
+                }
+                return { front: card.front, back: card.back };
+              });
             } catch (error) {
               console.error("Flashcard generation failed:", error);
             }
@@ -4123,9 +4108,9 @@ Focus on testing comprehension of key concepts. Return ONLY valid JSON array, no
               const tmpAudioPath = `/tmp/audio_${Date.now()}.wav`;
               const fs3 = await import("fs");
               fs3.writeFileSync(tmpPath, videoBuffer);
-              const { execSync: execSync2 } = await import("child_process");
+              const { execSync } = await import("child_process");
               try {
-                execSync2(
+                execSync(
                   `ffmpeg -i ${tmpPath} -vn -acodec pcm_s16le -ar 16000 -ac 1 ${tmpAudioPath} -y 2>/dev/null`
                 );
                 const audioBuffer = fs3.readFileSync(tmpAudioPath);
@@ -5079,7 +5064,6 @@ async function registerRoutes(app2) {
 import * as fs2 from "fs";
 import * as path2 from "path";
 import { createServer as createServer2 } from "node:http";
-import { execSync } from "node:child_process";
 var app = express();
 var log = console.log;
 var IS_PRODUCTION3 = process.env.NODE_ENV === "production";
@@ -5443,17 +5427,6 @@ function setupGracefulShutdown(server) {
     console.warn(
       "[Startup] RESEND_API_KEY is not set. Password reset codes will be logged to console instead of emailed."
     );
-  }
-  try {
-    log("[Startup] Syncing database schema...");
-    execSync("npx prisma generate && npx prisma db push --accept-data-loss", {
-      stdio: "inherit",
-      timeout: 6e4,
-      env: { ...process.env }
-    });
-    log("[Startup] Database schema sync complete");
-  } catch (err) {
-    console.error("[Startup] prisma db push failed, continuing:", err);
   }
   const port = parseInt(process.env.PORT || "5000", 10);
   try {

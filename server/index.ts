@@ -4,7 +4,6 @@ import { registerRoutes } from "./routes";
 import * as fs from "fs";
 import * as path from "path";
 import { createServer, type Server } from "node:http";
-import { execSync } from "node:child_process";
 
 const app = express();
 const log = console.log;
@@ -468,18 +467,6 @@ function setupGracefulShutdown(server: Server) {
     console.warn(
       "[Startup] RESEND_API_KEY is not set. Password reset codes will be logged to console instead of emailed.",
     );
-  }
-
-  try {
-    log("[Startup] Syncing database schema...");
-    execSync("npx prisma generate && npx prisma db push --accept-data-loss", {
-      stdio: "inherit",
-      timeout: 60_000,
-      env: { ...process.env },
-    });
-    log("[Startup] Database schema sync complete");
-  } catch (err) {
-    console.error("[Startup] prisma db push failed, continuing:", err);
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
