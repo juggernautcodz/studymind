@@ -74,6 +74,13 @@ function requireAI(req: AuthRequest, res: Response, next: NextFunction) {
   next();
 }
 
+async function findOwnedTopic(topicId: string, userId: string) {
+  return prisma.topic.findFirst({
+    where: { id: topicId, userId },
+    select: { id: true },
+  });
+}
+
 const MOCK_TRANSCRIPTIONS = [
   "Today we're going to discuss the fundamental principles of cellular biology. The cell is the basic unit of life, and understanding its structure is crucial for biology students. Let's start with the cell membrane, which is a phospholipid bilayer that controls what enters and exits the cell.",
   "In this lecture, we'll explore the French Revolution and its impact on modern democracy. The revolution began in 1789 with the storming of the Bastille. Key figures include Robespierre, Danton, and Napoleon Bonaparte.",
@@ -817,6 +824,16 @@ router.post(
     try {
       const { imageBase64, topicId, fileType } = req.body;
 
+      if (topicId) {
+        const topic = await findOwnedTopic(
+          topicId,
+          req.user?.id ?? ANONYMOUS_USER_ID,
+        );
+        if (!topic) {
+          return res.status(404).json({ error: "Topic not found" });
+        }
+      }
+
       if (!imageBase64) {
         return res.status(400).json({ error: "imageBase64 is required" });
       }
@@ -1024,6 +1041,16 @@ router.post(
     try {
       const { text, topicId } = req.body;
 
+      if (topicId) {
+        const topic = await findOwnedTopic(
+          topicId,
+          req.user?.id ?? ANONYMOUS_USER_ID,
+        );
+        if (!topic) {
+          return res.status(404).json({ error: "Topic not found" });
+        }
+      }
+
       if (!text || typeof text !== "string") {
         return res.status(400).json({ error: "Text is required" });
       }
@@ -1129,6 +1156,16 @@ router.post(
     try {
       const { text, topicId } = req.body;
 
+      if (topicId) {
+        const topic = await findOwnedTopic(
+          topicId,
+          req.user?.id ?? ANONYMOUS_USER_ID,
+        );
+        if (!topic) {
+          return res.status(404).json({ error: "Topic not found" });
+        }
+      }
+
       if (!text || typeof text !== "string") {
         return res.status(400).json({ error: "Text is required" });
       }
@@ -1228,6 +1265,16 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const { videoBase64, topicId } = req.body;
+
+      if (topicId) {
+        const topic = await findOwnedTopic(
+          topicId,
+          req.user?.id ?? ANONYMOUS_USER_ID,
+        );
+        if (!topic) {
+          return res.status(404).json({ error: "Topic not found" });
+        }
+      }
 
       if (!videoBase64) {
         return res.status(400).json({ error: "videoBase64 is required" });
@@ -1349,6 +1396,16 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const { videoUrl, topicId } = req.body;
+
+      if (topicId) {
+        const topic = await findOwnedTopic(
+          topicId,
+          req.user?.id ?? ANONYMOUS_USER_ID,
+        );
+        if (!topic) {
+          return res.status(404).json({ error: "Topic not found" });
+        }
+      }
 
       if (!videoUrl || typeof videoUrl !== "string") {
         return res.status(400).json({ error: "videoUrl is required" });
