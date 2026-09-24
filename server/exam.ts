@@ -16,13 +16,21 @@ router.get(
         orderBy: { examDate: "asc" },
       });
 
-      const examsWithDetails = await Promise.all(
+      const examDetails = await Promise.all(
         exams.map(async (exam) => {
-          const topicIds = JSON.parse(exam.topicIds) as string[];
+          const topicIds = [...new Set(JSON.parse(exam.topicIds) as string[])];
           const topics = await prisma.topic.findMany({
-            where: { id: { in: topicIds } },
+            where: {
+              id: { in: topicIds },
+              userId: req.user!.id,
+              course: { userId: req.user!.id },
+            },
             include: { course: true },
           });
+
+          if (topics.length !== topicIds.length) {
+            return null;
+          }
 
           const daysUntil = Math.ceil(
             (exam.examDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
@@ -36,6 +44,8 @@ router.get(
           };
         }),
       );
+
+      const examsWithDetails = examDetails.filter((exam) => exam !== null);
 
       res.json({ exams: examsWithDetails });
     } catch (error) {
@@ -63,13 +73,22 @@ router.post(
         (new Date(examDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
       );
 
+      const uniqueTopicIds = [...new Set(topicIds as string[])];
+
       const topics = await prisma.topic.findMany({
-        where: { id: { in: topicIds } },
+        where: {
+          id: { in: uniqueTopicIds },
+          userId: req.user!.id,
+        },
         include: {
           flashcards: true,
           quizzes: true,
         },
       });
+
+      if (topics.length !== uniqueTopicIds.length) {
+        return res.status(404).json({ error: "Topic not found" });
+      }
 
       const studyPlan = generateStudyPlan(topics, daysUntil);
 
@@ -78,7 +97,7 @@ router.post(
           userId: req.user!.id,
           name,
           examDate: new Date(examDate),
-          topicIds: JSON.stringify(topicIds),
+          topicIds: JSON.stringify(uniqueTopicIds),
           studyPlan: JSON.stringify(studyPlan),
         },
       });
@@ -114,9 +133,13 @@ router.get(
         return res.status(404).json({ error: "Exam not found" });
       }
 
-      const topicIds = JSON.parse(exam.topicIds) as string[];
+      const topicIds = [...new Set(JSON.parse(exam.topicIds) as string[])];
       const topics = await prisma.topic.findMany({
-        where: { id: { in: topicIds } },
+        where: {
+          id: { in: topicIds },
+          userId: req.user!.id,
+          course: { userId: req.user!.id },
+        },
         include: {
           course: true,
           flashcards: true,
@@ -125,6 +148,10 @@ router.get(
           },
         },
       });
+
+      if (topics.length !== topicIds.length) {
+        return res.status(404).json({ error: "Exam not found" });
+      }
 
       const daysUntil = Math.ceil(
         (exam.examDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
@@ -178,12 +205,27 @@ router.get(
         return res.status(404).json({ error: "Exam not found" });
       }
 
-      const topicIds = JSON.parse(exam.topicIds) as string[];
+      const topicIds = [...new Set(JSON.parse(exam.topicIds) as string[])];
+
+      const topics = await prisma.topic.findMany({
+        where: {
+          id: { in: topicIds },
+          userId: req.user!.id,
+        },
+        select: { id: true },
+      });
+
+      if (topics.length !== topicIds.length) {
+        return res.status(404).json({ error: "Exam not found" });
+      }
 
       const questions = await prisma.quizQuestion.findMany({
         where: {
           quiz: {
-            topicId: { in: topicIds },
+            topic: {
+              id: { in: topicIds },
+              userId: req.user!.id,
+            },
           },
         },
         include: {
