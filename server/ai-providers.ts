@@ -724,7 +724,10 @@ router.post(
       const { answers } = req.body;
 
       const quiz = await prisma.quiz.findFirst({
-        where: { id: quizId },
+        where: {
+          id: quizId,
+          topic: { userId: req.user?.id ?? ANONYMOUS_USER_ID },
+        },
         include: { questions: true },
       });
 
