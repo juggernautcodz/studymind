@@ -2,9 +2,9 @@
 
 Branch: `studymind-2.0`
 
-Starting HEAD for Phase 7A: `5cdb21132f037c1771d16bab50f43a6929cf10a5`
+Starting HEAD for Phase 7B: `9c8ea3c5c2929acc6c9c46b20c2671eda4d8dd8d`
 
-Current phase: Phase 7A — Personalized Study Today backend/domain foundation implemented, not committed
+Current phase: Phase 7B — Personalized Study Today client integration implemented, not committed
 
 ## Completed phases
 
@@ -99,6 +99,26 @@ Each recommendation returns structured reason codes and labels, mastery state/sc
 - Quizzes, flashcards, and source material are reached only through an authenticated user's owned topic/course graph.
 - The repository contract and tests verify that another user's records cannot influence the result.
 
+### Phase 7B Study Today client integration
+
+- Replaced the old locally shuffled `StudyTodayScreen` card session with the canonical server-backed Study Today plan. The screen now reads only `GET /api/study-today`; it does not calculate, sort, or reshuffle recommendations locally.
+- Added a typed React Query client layer with a 30-second stale window, authenticated requests, typed result/status/reason/action models, and the `study-today` cache key.
+- The existing dashboard destination remains `StudyToday`; its legacy `/api/adaptive/study-today` due-card summary contract remains intact and is not presented as a competing recommendation list.
+- Study Today presents the server order as rank-numbered cards with course, concept, readable priority, mastery/evidence state, nearest upcoming scoped exam, friendly structured reasons, and a deterministic action.
+- Added intentional loading, authentication/unavailable error, no-course, no-concept, no-recommendation, and sparse-evidence states. No urgency or replacement list is fabricated for empty responses.
+- Action buttons map only to existing Topic capabilities: flashcard actions open the Cards tab, quiz actions open the Quiz tab, and source/concept actions open the Notes tab. The Topic route now accepts an optional focused initial tab.
+
+### Phase 7B files
+
+- Added `client/lib/studyToday.ts`
+- Added `client/lib/studyTodayPresentation.ts`
+- Added `client/lib/studyTodayPresentation.test.ts`
+- Updated `client/screens/StudyTodayScreen.tsx`
+- Updated `client/screens/TopicScreen.tsx`
+- Updated `client/navigation/RootStackNavigator.tsx`
+- Updated `package.json`
+- Updated `docs/STUDYMIND_2_STATUS.md`
+
 ### Phase 7A files
 
 - Added `server/study-today-domain.ts`
@@ -153,14 +173,23 @@ The following committed migrations remain unapplied:
 - deterministic ranking independent of input order
 - bounded recommendation output
 
+`client/lib/studyTodayPresentation.test.ts` covers:
+
+- preservation of canonical server recommendation order
+- friendly reason, mastery, priority, and action labels
+- visible sparse and missing evidence state
+- loading, error, and empty state selection
+- supported action mapping to existing Topic tabs
+
 Safe checks completed:
 
 - `npm run test:exam-readiness` — 10 passed
 - `npm run test:exam-readiness-client` — 7 passed
 - `npm run test:study-today` — 11 passed
+- `npm run test:study-today-client` — 5 passed
 - `npm run check:types`
 - `npm run server:build`
-- focused Prettier check for the Phase 7A domain, service, route, test, package, and status files
+- focused Prettier checks for the Phase 7A/7B added and rewritten files, package, and status files
 - `git diff --check`
 
 There is no standalone Mastery test command in the repository. The Exam Readiness regression suite includes a test that its calculation preserves the Phase 5 mastery inputs. Prisma validation/generation was not rerun because Phase 7A does not change the schema.
@@ -168,12 +197,11 @@ There is no standalone Mastery test command in the repository. The Exam Readines
 Validation limitations:
 
 - `npm run lint` cannot start because the existing ESLint config imports the uninstalled `eslint-plugin-prettier/recommended` module.
+- `client/screens/TopicScreen.tsx` has pre-existing whole-file Prettier deviations. Its focused-tab change was kept minimal rather than mechanically reformatting unrelated code.
 - `npm run audit:fast` uses POSIX environment-variable syntax and does not run on Windows. The full boot audit was not substituted because route startup can touch the configured PostgreSQL database, which is forbidden for this phase.
 
 ## Remaining Phase 7 work
 
-- Phase 7B should add the client Study Today presentation and navigation behavior using `GET /api/study-today` without duplicating ranking logic on-device.
-- The existing `StudyTodayScreen` still shuffles locally cached flashcards; it was intentionally not changed in the backend/domain phase.
-- Live API integration depends on the already committed prerequisite SourceLock, Mastery, and Exam Readiness migrations being separately reviewed and deployed.
+- Phase 7 implementation is complete. Live API/device verification depends on the already committed prerequisite SourceLock, Mastery, and Exam Readiness migrations being separately reviewed and deployed.
 - User timezone persistence is not currently available. UTC is explicit in the response and should be revisited only with a product-wide timezone design.
 - The existing ESLint dependency/configuration blocker remains unrelated to Phase 7A.

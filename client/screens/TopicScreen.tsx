@@ -65,11 +65,11 @@ export default function TopicScreen() {
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const route = useRoute<any>();
-  const { topicId, courseId } = route.params;
+  const { topicId, courseId, initialTab } = route.params;
 
   const [topic, setTopic] = useState<Topic | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("notes");
+  const [activeTab, setActiveTab] = useState(initialTab ?? "notes");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingLabel, setUploadingLabel] = useState("Processing...");
 
@@ -112,6 +112,10 @@ export default function TopicScreen() {
       loadData();
     }, [loadData]),
   );
+
+  React.useEffect(() => {
+    setActiveTab(initialTab ?? "notes");
+  }, [initialTab, topicId]);
 
   React.useLayoutEffect(() => {
     if (topic) {

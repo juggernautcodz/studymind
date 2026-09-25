@@ -1,548 +1,337 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { Icon } from "@/components/Icon";
-import * as Haptics from "expo-haptics";
-import * as Clipboard from "expo-clipboard";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
+import { Badge } from "@/components/Badge";
+import { Button } from "@/components/Button";
+import { Card } from "@/components/Card";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
+import { Icon } from "@/components/Icon";
+import { LoadingState } from "@/components/LoadingState";
+import { SectionHeader } from "@/components/SectionHeader";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Card } from "@/components/Card";
-import { Button } from "@/components/Button";
-import { Badge } from "@/components/Badge";
-import { SectionHeader } from "@/components/SectionHeader";
-import { LoadingState } from "@/components/LoadingState";
-import { EmptyState } from "@/components/EmptyState";
+import { BorderRadius, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth } from "@/contexts/AuthContext";
-import { storage } from "@/lib/storage";
-import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
-import { Spacing, BorderRadius } from "@/constants/theme";
-import type { Topic, Flashcard } from "@/types";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { v4 as uuidv4 } from "uuid";
+import { useStudyToday, type StudyTodayRecommendation } from "@/lib/studyToday";
+import {
+  classifyStudyTodayError,
+  examRelevanceLabel,
+  getStudyTodayActionDestination,
+  getStudyTodayDisplay,
+  getStudyTodayViewState,
+  masteryStateLabel,
+  priorityLabel,
+  studyTodayReasonLabel,
+  suggestedActionLabel,
+} from "@/lib/studyTodayPresentation";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
-interface StudyCard {
-  id: string;
-  front: string;
-  back: string;
-  topicName: string;
-  topicId: string;
-  sourceQuote?: string;
+function priorityVariant(priority: StudyTodayRecommendation["priority"]) {
+  switch (priority) {
+    case "HIGH":
+      return "error" as const;
+    case "MEDIUM":
+      return "warning" as const;
+    case "LOW":
+      return "info" as const;
+  }
+}
+
+function StudyTodayError({
+  error,
+  onRetry,
+}: {
+  error: unknown;
+  onRetry: () => void;
+}) {
+  const kind = classifyStudyTodayError(error);
+  const copy =
+    kind === "AUTHENTICATION"
+      ? {
+          title: "Sign in required",
+          message: "Sign in again to load your Study Today plan.",
+        }
+      : {
+          title: "Study Today unavailable",
+          message:
+            "We couldn't load your current study plan. Check your connection and try again.",
+        };
+
+  return (
+    <ThemedView style={styles.stateContainer}>
+      <ErrorState title={copy.title} message={copy.message} onRetry={onRetry} />
+    </ThemedView>
+  );
+}
+
+function RecommendationCard({
+  recommendation,
+  rank,
+  onPress,
+}: {
+  recommendation: StudyTodayRecommendation;
+  rank: number;
+  onPress: () => void;
+}) {
+  const { theme } = useTheme();
+  const examLabel = examRelevanceLabel(recommendation);
+  const masterySummary =
+    recommendation.mastery.score === null
+      ? "No meaningful mastery evidence yet"
+      : `${recommendation.mastery.score}% mastery · ${recommendation.mastery.confidence}% confidence`;
+
+  return (
+    <Card
+      style={styles.recommendationCard}
+      accessibilityLabel={`Recommendation ${rank}. ${recommendation.concept.name} for ${recommendation.course.name}. ${priorityLabel(recommendation.priority)}. ${masterySummary}.`}
+    >
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitle}>
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            #{rank} · {recommendation.course.name}
+          </ThemedText>
+          <ThemedText type="h4" style={styles.conceptName}>
+            {recommendation.concept.name}
+          </ThemedText>
+        </View>
+        <Badge
+          label={priorityLabel(recommendation.priority)}
+          variant={priorityVariant(recommendation.priority)}
+        />
+      </View>
+
+      <ThemedText type="small" style={{ color: theme.textSecondary }}>
+        {masteryStateLabel(recommendation.mastery.state)} · {masterySummary}
+      </ThemedText>
+
+      {examLabel ? (
+        <View style={[styles.examRow, { backgroundColor: theme.link + "12" }]}>
+          <Icon name="calendar" size={15} color={theme.link} />
+          <ThemedText
+            type="small"
+            style={[styles.examText, { color: theme.link }]}
+          >
+            {examLabel}
+          </ThemedText>
+        </View>
+      ) : null}
+
+      <ThemedText
+        type="caption"
+        style={[styles.whyLabel, { color: theme.textSecondary }]}
+      >
+        WHY THIS IS RECOMMENDED
+      </ThemedText>
+      <View style={styles.reasonList}>
+        {recommendation.reasons.map((reason) => (
+          <View
+            key={reason.code}
+            style={[
+              styles.reasonChip,
+              { backgroundColor: theme.backgroundSecondary },
+            ]}
+          >
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              {studyTodayReasonLabel(reason.code)}
+            </ThemedText>
+          </View>
+        ))}
+      </View>
+
+      <Button
+        onPress={onPress}
+        variant="secondary"
+        fullWidth
+        accessibilityLabel={`${suggestedActionLabel(recommendation.suggestedAction.code)} for ${recommendation.concept.name}`}
+        accessibilityHint={recommendation.suggestedAction.label}
+        style={styles.actionButton}
+      >
+        {suggestedActionLabel(recommendation.suggestedAction.code)}
+      </Button>
+    </Card>
+  );
 }
 
 export default function StudyTodayScreen() {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { user } = useAuth();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const {
+    data: studyToday,
+    isLoading,
+    error,
+    refetch,
+    isRefetching,
+  } = useStudyToday();
+  const viewState = getStudyTodayViewState({ isLoading, error, studyToday });
 
-  const [allCards, setAllCards] = useState<StudyCard[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [wrongCount, setWrongCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [studyComplete, setStudyComplete] = useState(false);
-
-  const flipProgress = useSharedValue(0);
-
-  const loadStudyData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const loadedTopics = await storage.getTopics();
-
-      const cards: StudyCard[] = [];
-      for (const topic of loadedTopics) {
-        const flashcards = await storage.getFlashcards(topic.id);
-        if (flashcards.length > 0) {
-          flashcards.forEach((fc) => {
-            cards.push({
-              id: fc.id,
-              front: fc.question,
-              back: fc.answer,
-              topicName: topic.name,
-              topicId: topic.id,
-              sourceQuote: fc.sourceQuote,
-            });
-          });
-        }
-      }
-
-      const shuffled = cards.sort(() => Math.random() - 0.5);
-      setAllCards(shuffled);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadStudyData();
-      setCurrentIndex(0);
-      setCorrectCount(0);
-      setWrongCount(0);
-      setShowAnswer(false);
-      setStudyComplete(false);
-    }, [loadStudyData]),
-  );
-
-  const handleFlip = () => {
-    Haptics.selectionAsync();
-    setShowAnswer(!showAnswer);
-    flipProgress.value = withSpring(showAnswer ? 0 : 1);
-  };
-
-  const recordReview = useCallback(async (flashcardId: string, correct: boolean, eventId: string) => {
-    try {
-      const authHeaders = await getAuthHeaders();
-      if (!authHeaders.Authorization) return;
-      await fetch(
-        new URL(`/api/adaptive/flashcards/${flashcardId}/answer`, getApiUrl()).toString(),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders },
-          credentials: "include",
-          body: JSON.stringify({ correct, eventId }),
-        },
-      );
-    } catch {
-      // Best-effort — due-date tracking degrades gracefully offline; the
-      // session score above (correctCount/wrongCount) still works locally.
-    }
-  }, []);
-
-  const handleAnswer = (correct: boolean) => {
-    Haptics.impactAsync(
-      correct
-        ? Haptics.ImpactFeedbackStyle.Light
-        : Haptics.ImpactFeedbackStyle.Medium,
-    );
-
-    if (correct) {
-      setCorrectCount((c) => c + 1);
-    } else {
-      setWrongCount((c) => c + 1);
-    }
-
-    recordReview(currentCard.id, correct, uuidv4());
-
-    if (currentIndex < allCards.length - 1) {
-      setCurrentIndex((i) => i + 1);
-      setShowAnswer(false);
-      flipProgress.value = 0;
-    } else {
-      setStudyComplete(true);
-    }
-  };
-
-  const handleCopyCard = useCallback(async () => {
-    if (allCards.length === 0 || currentIndex >= allCards.length) return;
-    const card = allCards[currentIndex];
-    const text = `Q: ${card.front}\nA: ${card.back}`;
-    await Clipboard.setStringAsync(text);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [allCards, currentIndex]);
-
-  const handleRestart = () => {
-    setCurrentIndex(0);
-    setCorrectCount(0);
-    setWrongCount(0);
-    setShowAnswer(false);
-    setStudyComplete(false);
-    flipProgress.value = 0;
-    setAllCards((cards) => [...cards].sort(() => Math.random() - 0.5));
-  };
-
-  const currentCard = allCards[currentIndex];
-  const progress =
-    allCards.length > 0 ? ((currentIndex + 1) / allCards.length) * 100 : 0;
-
-  const cardFrontStyle = useAnimatedStyle(() => ({
-    opacity: 1 - flipProgress.value,
-    transform: [{ rotateY: `${flipProgress.value * 180}deg` }],
-  }));
-
-  const cardBackStyle = useAnimatedStyle(() => ({
-    opacity: flipProgress.value,
-    transform: [{ rotateY: `${180 - flipProgress.value * 180}deg` }],
-  }));
-
-  if (isLoading) {
+  if (viewState === "LOADING") {
     return (
-      <LoadingState fullScreen message="Preparing your study session..." />
+      <LoadingState fullScreen message="Preparing your Study Today plan..." />
     );
   }
+  if (viewState === "ERROR" || !studyToday) {
+    return <StudyTodayError error={error} onRetry={() => void refetch()} />;
+  }
 
-  if (allCards.length === 0) {
+  const emptyStates = {
+    NO_COURSES: {
+      icon: "book-open",
+      title: "No courses yet",
+      description:
+        "Add a course and study material first. Your Study Today plan will appear when concepts are available.",
+      buttonLabel: "Go to Home",
+      onPress: () => navigation.navigate("Main"),
+    },
+    NO_CONCEPTS: {
+      icon: "layers",
+      title: "No concepts to prioritize yet",
+      description:
+        "Add or process study material in a course to build concepts for a personalized plan.",
+      buttonLabel: "Go to Home",
+      onPress: () => navigation.navigate("Main"),
+    },
+    EMPTY: {
+      icon: "check-circle",
+      title: "No study priorities right now",
+      description:
+        "Your current evidence does not identify a specific action. Add practice or refresh after your next study session.",
+      buttonLabel: "Refresh plan",
+      onPress: () => void refetch(),
+    },
+  };
+
+  if (viewState !== "READY") {
+    const empty = emptyStates[viewState];
     return (
-      <ThemedView style={styles.container}>
-        <View
-          style={[
-            styles.emptyContainer,
-            {
-              paddingTop: headerHeight + Spacing["2xl"],
-              paddingBottom: insets.bottom + Spacing["2xl"],
-            },
-          ]}
-        >
-          <EmptyState
-            icon="layers"
-            iconColor={theme.success}
-            title="No Flashcards Yet"
-            description="Add study material to a topic and we'll create flashcards automatically."
-            buttonLabel="Go to Home"
-            onButtonPress={() =>
-              navigation.navigate("Main", { screen: "HomeTab" })
-            }
-          />
-        </View>
+      <ThemedView style={styles.stateContainer}>
+        <EmptyState
+          icon={empty.icon}
+          iconColor={theme.link}
+          title={empty.title}
+          description={empty.description}
+          buttonLabel={empty.buttonLabel}
+          onButtonPress={empty.onPress}
+        />
       </ThemedView>
     );
   }
 
-  if (studyComplete) {
-    const totalAnswered = correctCount + wrongCount;
-    const accuracy =
-      totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
-
-    return (
-      <ThemedView style={styles.container}>
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            {
-              paddingTop: headerHeight + Spacing["2xl"],
-              paddingBottom: insets.bottom + Spacing["3xl"],
-            },
-          ]}
-        >
-          <View style={styles.completedHeader}>
-            <View
-              style={[
-                styles.completedIcon,
-                { backgroundColor: theme.success + "15" },
-              ]}
-            >
-              <Icon name="check-circle" size={48} color={theme.success} />
-            </View>
-            <ThemedText type="h1" style={styles.completedTitle}>
-              Session Complete!
-            </ThemedText>
-            <ThemedText
-              type="body"
-              style={{ color: theme.textSecondary, textAlign: "center" }}
-            >
-              You reviewed {allCards.length} cards
-            </ThemedText>
-          </View>
-
-          <Card style={styles.statsCard}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <ThemedText type="display" style={{ color: theme.success }}>
-                  {correctCount}
-                </ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                  Correct
-                </ThemedText>
-              </View>
-              <View
-                style={[styles.statDivider, { backgroundColor: theme.border }]}
-              />
-              <View style={styles.statItem}>
-                <ThemedText type="display" style={{ color: theme.error }}>
-                  {wrongCount}
-                </ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                  Needs Work
-                </ThemedText>
-              </View>
-              <View
-                style={[styles.statDivider, { backgroundColor: theme.border }]}
-              />
-              <View style={styles.statItem}>
-                <ThemedText type="display" style={{ color: theme.link }}>
-                  {accuracy}%
-                </ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                  Accuracy
-                </ThemedText>
-              </View>
-            </View>
-          </Card>
-
-          <View style={styles.completedActions}>
-            <Button onPress={handleRestart} size="lg" fullWidth>
-              Study Again
-            </Button>
-            <Button
-              onPress={() => navigation.navigate("ExamMode")}
-              variant="secondary"
-              size="lg"
-              fullWidth
-              style={styles.secondaryButton}
-            >
-              Take a Quiz
-            </Button>
-          </View>
-        </ScrollView>
-      </ThemedView>
-    );
-  }
+  const display = getStudyTodayDisplay(studyToday);
 
   return (
     <ThemedView style={styles.container}>
-      <View
-        style={[
+      <ScrollView
+        contentContainerStyle={[
           styles.content,
-          {
-            paddingTop: headerHeight + Spacing.lg,
-            paddingBottom: insets.bottom + Spacing.lg,
-          },
+          { paddingTop: headerHeight + Spacing.md },
         ]}
       >
-        <View style={styles.progressSection}>
-          <View style={styles.progressHeader}>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              Card {currentIndex + 1} of {allCards.length}
-            </ThemedText>
-            <View style={styles.scoreContainer}>
-              <Badge label={`${correctCount}`} variant="success" />
-              <Badge label={`${wrongCount}`} variant="error" />
-            </View>
-          </View>
-          <View style={[styles.progressBar, { backgroundColor: theme.border }]}>
-            <View
+        <ThemedText type="h2">Study today</ThemedText>
+        <ThemedText type="body" style={{ color: theme.textSecondary }}>
+          Your plan is ranked from your mastery, available evidence, due cards,
+          and upcoming exams.
+        </ThemedText>
+
+        {display.hasEvidenceGap ? (
+          <View
+            style={[
+              styles.evidenceNotice,
+              { backgroundColor: theme.warning + "14" },
+            ]}
+            accessibilityRole="summary"
+            accessibilityLabel="Some recommendations have limited mastery evidence."
+          >
+            <Icon name="info" size={18} color={theme.warning} />
+            <ThemedText
+              type="small"
               style={[
-                styles.progressFill,
-                { width: `${progress}%`, backgroundColor: theme.link },
+                styles.evidenceNoticeText,
+                { color: theme.textSecondary },
               ]}
-            />
+            >
+              Some recommendations have limited mastery evidence. Practice can
+              make future priorities more representative.
+            </ThemedText>
           </View>
-        </View>
+        ) : null}
 
-        <Pressable
-          style={styles.flashcardContainer}
-          onPress={handleFlip}
-          accessibilityRole="button"
-          accessibilityLabel={
-            showAnswer ? "Tap to hide answer" : "Tap to reveal answer"
-          }
+        <SectionHeader title="Your prioritized plan" icon="list" />
+        {display.recommendations.map((recommendation, index) => (
+          <RecommendationCard
+            key={recommendation.concept.id}
+            recommendation={recommendation}
+            rank={index + 1}
+            onPress={() => {
+              const destination =
+                getStudyTodayActionDestination(recommendation);
+              navigation.navigate(destination.screen, destination.params);
+            }}
+          />
+        ))}
+
+        <Button
+          onPress={() => void refetch()}
+          loading={isRefetching}
+          variant="secondary"
+          fullWidth
+          accessibilityLabel="Refresh Study Today plan"
+          style={styles.refreshButton}
         >
-          <Card style={styles.flashcard}>
-            <Badge
-              label={currentCard.topicName}
-              variant="info"
-              style={styles.topicLabel}
-            />
-            <Pressable onPress={handleCopyCard} style={styles.copyButton} testID="button-copy-card">
-              <Icon name="copy" size={16} color={theme.textSecondary} />
-            </Pressable>
-
-            <View style={styles.cardContent}>
-              <ThemedText
-                type="caption"
-                style={[styles.cardLabel, { color: theme.textSecondary }]}
-              >
-                {showAnswer ? "ANSWER" : "QUESTION"}
-              </ThemedText>
-              <ThemedText type="h2" style={styles.cardText}>
-                {showAnswer ? currentCard.back : currentCard.front}
-              </ThemedText>
-              {showAnswer && currentCard.sourceQuote ? (
-                <View style={[styles.sourceQuote, { borderTopColor: theme.border }]}>
-                  <ThemedText
-                    type="small"
-                    style={{ color: theme.textSecondary, fontStyle: "italic" }}
-                    numberOfLines={3}
-                  >
-                    {`"${currentCard.sourceQuote}"`}
-                  </ThemedText>
-                </View>
-              ) : null}
-            </View>
-
-            {!showAnswer ? (
-              <View style={styles.tapHint}>
-                <Icon name="refresh-cw" size={14} color={theme.textSecondary} />
-                <ThemedText
-                  type="small"
-                  style={{ color: theme.textSecondary, marginLeft: 6 }}
-                >
-                  Tap to reveal answer
-                </ThemedText>
-              </View>
-            ) : null}
-          </Card>
-        </Pressable>
-
-        {showAnswer ? (
-          <View style={styles.answerButtons}>
-            <Button
-              onPress={() => handleAnswer(false)}
-              variant="destructive"
-              size="lg"
-              style={styles.answerButton}
-              icon={<Icon name="x" size={18} color="#fff" />}
-            >
-              Needs Work
-            </Button>
-            <Button
-              onPress={() => handleAnswer(true)}
-              size="lg"
-              style={[styles.answerButton, { backgroundColor: theme.success }]}
-              icon={<Icon name="check" size={18} color="#fff" />}
-            >
-              Got It
-            </Button>
-          </View>
-        ) : (
-          <Button onPress={handleFlip} size="lg" fullWidth>
-            Show Answer
-          </Button>
-        )}
-      </View>
+          Refresh Plan
+        </Button>
+      </ScrollView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  progressSection: {
-    marginBottom: Spacing.xl,
-  },
-  progressHeader: {
+  container: { flex: 1 },
+  stateContainer: { flex: 1, paddingTop: Spacing["4xl"] },
+  content: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing["4xl"] },
+  recommendationCard: { marginBottom: Spacing.md },
+  cardHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+  },
+  cardTitle: { flex: 1 },
+  conceptName: { marginTop: Spacing.xs },
+  examRow: {
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: Spacing.sm,
-  },
-  scoreContainer: {
-    flexDirection: "row",
-    gap: Spacing.xs,
-  },
-  progressBar: {
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  flashcardContainer: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  flashcard: {
-    minHeight: 300,
-    justifyContent: "space-between",
-    shadowColor: "#7C3AED",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  topicLabel: {
     alignSelf: "flex-start",
+    borderRadius: BorderRadius.xs,
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
-  cardContent: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: Spacing["2xl"],
-  },
-  cardLabel: {
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    fontWeight: "700",
-    marginBottom: Spacing.md,
-  },
-  cardText: {
-    textAlign: "center",
-    lineHeight: 32,
-  },
-  tapHint: {
+  examText: { marginLeft: Spacing.xs, flexShrink: 1 },
+  whyLabel: { fontWeight: "700", letterSpacing: 0.7, marginTop: Spacing.md },
+  reasonList: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: Spacing.md,
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
   },
-  sourceQuote: {
-    marginTop: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderTopWidth: 1,
-    maxWidth: "100%",
+  reasonChip: {
+    borderRadius: BorderRadius.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
-  answerButtons: {
+  actionButton: { marginTop: Spacing.lg },
+  evidenceNotice: {
     flexDirection: "row",
-    gap: Spacing.md,
-  },
-  answerButton: {
-    flex: 1,
-  },
-  completedHeader: {
-    alignItems: "center",
-    marginBottom: Spacing["2xl"],
-  },
-  completedIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.xl,
-  },
-  completedTitle: {
-    marginBottom: Spacing.sm,
-  },
-  statsCard: {
-    marginBottom: Spacing["2xl"],
-  },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-  },
-  completedActions: {
-    gap: Spacing.md,
-  },
-  secondaryButton: {
-    marginTop: 0,
-  },
-  copyButton: {
-    position: "absolute",
-    top: Spacing.sm,
-    right: Spacing.sm,
-    padding: Spacing.sm,
+    alignItems: "flex-start",
     borderRadius: BorderRadius.sm,
-    zIndex: 1,
+    marginTop: Spacing.lg,
+    padding: Spacing.md,
   },
+  evidenceNoticeText: { flex: 1, marginLeft: Spacing.sm },
+  refreshButton: { marginTop: Spacing.lg },
 });

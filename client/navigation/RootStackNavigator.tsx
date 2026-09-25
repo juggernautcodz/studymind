@@ -31,7 +31,11 @@ export type RootStackParamList = {
   Semester: { semesterId: string };
   Course: { courseId: string };
   CourseBrain: { courseId: string };
-  Topic: { topicId: string; courseId: string };
+  Topic: {
+    topicId: string;
+    courseId: string;
+    initialTab?: "notes" | "flashcards" | "quiz";
+  };
   Record: { topicId: string };
   Mindmap: { courseId: string };
   Billing: undefined;
