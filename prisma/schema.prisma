@@ -129,6 +129,7 @@ model Course {
   concepts       Concept[]
   masteries      ConceptMastery[]
   masteryEvents  MasteryEvent[]
+  exams          Exam[]
   topics         Topic[]
 
   @@index([userId])
@@ -222,6 +223,7 @@ model Concept {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   masteries ConceptMastery[]
   events    MasteryEvent[]
+  examScopes ExamConcept[]
 
   @@unique([courseId, topicId])
   @@index([userId])
@@ -350,17 +352,34 @@ model MindmapNode {
 }
 
 model Exam {
-  id        String   @id @default(uuid())
-  userId    String
-  name      String
-  examDate  DateTime
-  topicIds  String
-  studyPlan String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String        @id @default(uuid())
+  userId        String
+  courseId      String?
+  name          String
+  description   String?
+  examDate      DateTime
+  topicIds      String
+  studyPlan     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course        Course?       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  conceptScopes ExamConcept[]
 
   @@index([userId])
+  @@index([courseId])
+  @@index([userId, courseId])
+}
+
+model ExamConcept {
+  examId    String
+  conceptId String
+  createdAt DateTime @default(now())
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  concept   Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@id([examId, conceptId])
+  @@index([conceptId])
 }
 
 model Source {
