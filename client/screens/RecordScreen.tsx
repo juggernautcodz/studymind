@@ -35,15 +35,24 @@ import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
 import { storage } from "@/lib/storage";
 import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
+import { ensureTopicOnServer } from "@/lib/serverSync";
+import {
+  pollLectureAutopilot,
+  retryLectureAutopilot,
+  startLectureAutopilot,
+} from "@/lib/lectureAutopilot";
+import type { LectureAutopilotJobDto } from "../../shared/lecture-autopilot";
 import { Spacing, BorderRadius } from "@/constants/theme";
 
 type RecordingState =
   | "idle"
   | "recording"
   | "processing"
+  | "workflow-choice"
   | "choosing"
   | "generating"
-  | "completed";
+  | "completed"
+  | "failed";
 
 class PaywallRequiredError extends Error {
   constructor(message: string) {
@@ -81,9 +90,13 @@ export default function RecordScreen() {
   const [savedTranscript, setSavedTranscript] = useState<string>("");
   const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
   const [whiteboardPhotosAdded, setWhiteboardPhotosAdded] = useState(0);
+  const [pipelineError, setPipelineError] = useState("");
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const isProcessingRef = useRef(false);
   const isMountedRef = useRef(true);
+  const lectureJobIdRef = useRef<string | null>(null);
+  const lectureAudioBase64Ref = useRef<string | null>(null);
+  const recordingUriRef = useRef<string | null>(null);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const pulseScale = useSharedValue(1);
@@ -123,6 +136,14 @@ export default function RecordScreen() {
 
   const startRecording = async () => {
     if (state !== "idle" || isProcessingRef.current) return;
+    if (!Object.values(materialSelection).some(Boolean)) {
+      showToast({
+        type: "warning",
+        title: "Choose study materials",
+        message: "Select at least one item for Lecture Autopilot to create.",
+      });
+      return;
+    }
     if (!permissionGranted) {
       const status = await AudioModule.requestRecordingPermissionsAsync();
       if (!status.granted) {
@@ -228,6 +249,250 @@ export default function RecordScreen() {
     return { error: "Transcription timed out" };
   };
 
+  const cacheLectureAutopilotResult = async (
+    job: LectureAutopilotJobDto,
+  ): Promise<void> => {
+    const result = job.result;
+    if (!result) throw new Error("Lecture Autopilot completed without a result");
+    const topic = await storage.getTopic(topicId);
+
+    await storage.saveTranscript({
+      recordingId: result.recording.id,
+      topicId,
+      text: result.transcript,
+      timestamps: [],
+    });
+
+    if (result.notes) {
+      await storage.saveNotes({
+        topicId,
+        title: topic?.name || "Topic Notes",
+        sections: [
+          {
+            heading: "Lecture Autopilot",
+            bullets: result.notes
+              .split(/\n+/)
+              .map((line) => line.trim())
+              .filter(Boolean),
+          },
+        ],
+      });
+    }
+
+    if (result.flashcards.length > 0) {
+      await storage.cacheServerFlashcards(
+        result.flashcards.map((card) => ({
+          id: card.id,
+          topicId,
+          question: card.front,
+          answer: card.back,
+          orderIndex: card.orderIndex,
+        })),
+      );
+    }
+
+    if (result.quiz) {
+      await storage.cacheServerQuiz(
+        {
+          id: result.quiz.id,
+          topicId,
+          createdAt: new Date().toISOString(),
+        },
+        result.quiz.questions.map((question) => ({
+          id: question.id,
+          quizId: result.quiz!.id,
+          question: question.question,
+          options: question.options,
+          correctIndex: question.correctAnswer,
+          orderIndex: question.orderIndex,
+        })),
+      );
+    }
+
+    await storage.updateTopic(topicId, { status: "completed" });
+  };
+
+  const finishLectureAutopilotJob = async (
+    initialJob: LectureAutopilotJobDto,
+  ): Promise<void> => {
+    setProcessingStep(initialJob.status);
+    const job =
+      initialJob.status === "complete"
+        ? initialJob
+        : await pollLectureAutopilot(initialJob.id, setProcessingStep);
+    await cacheLectureAutopilotResult(job);
+
+    if (recordingUriRef.current) {
+      await FileSystem.deleteAsync(recordingUriRef.current, {
+        idempotent: true,
+      }).catch(() => {});
+      recordingUriRef.current = null;
+    }
+    lectureAudioBase64Ref.current = null;
+    setProcessingStep("complete");
+    setPipelineError("");
+    setState("completed");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    showToast({
+      type: "success",
+      title: "Lecture Autopilot complete!",
+      message: "Your transcript and study materials are ready.",
+    });
+  };
+
+  const retryFailedPipeline = async () => {
+    const jobId = lectureJobIdRef.current;
+    const audioBase64 = lectureAudioBase64Ref.current;
+    if (!jobId || !audioBase64 || isProcessingRef.current) {
+      setState("idle");
+      return;
+    }
+
+    isProcessingRef.current = true;
+    setPipelineError("");
+    setProcessingStep("queued");
+    setState("processing");
+    try {
+      const job = await retryLectureAutopilot(jobId, audioBase64);
+      await finishLectureAutopilotJob(job);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Please try again";
+      setPipelineError(message);
+      setState("failed");
+      showToast({ type: "error", title: "Retry failed", message });
+    } finally {
+      isProcessingRef.current = false;
+    }
+  };
+
+  const startLectureAutopilotForRecordedAudio = async () => {
+    const audioBase64 = lectureAudioBase64Ref.current;
+    if (!audioBase64 || isProcessingRef.current) return;
+
+    isProcessingRef.current = true;
+    setPipelineError("");
+    setProcessingStep("queued");
+    setState("processing");
+    try {
+      const topic = await storage.getTopic(topicId);
+      if (!topic) throw new Error("Topic not found");
+      const serverTopicId = await ensureTopicOnServer(
+        topic,
+        await storage.getAuthToken(),
+      );
+      if (!serverTopicId) {
+        throw new Error("Topic could not be synchronized before processing");
+      }
+
+      const job = await startLectureAutopilot({
+        courseId: topic.courseId,
+        topicId: serverTopicId,
+        audioBase64,
+        durationMinutes: Math.max(1, Math.ceil(duration / 60)),
+        materials: materialSelection,
+      });
+      lectureJobIdRef.current = job.id;
+      await finishLectureAutopilotJob(job);
+    } catch (error) {
+      console.error("Lecture Autopilot error:", error);
+      await storage.updateTopic(topicId, { status: "pending" }).catch(() => {});
+      const errorMessage =
+        error instanceof Error ? error.message : "Please try again";
+      setPipelineError(errorMessage);
+      setState("failed");
+      showToast({
+        type: "error",
+        title: "Lecture Autopilot failed",
+        message: errorMessage,
+      });
+    } finally {
+      isProcessingRef.current = false;
+    }
+  };
+
+  const continueWithManualGeneration = async () => {
+    const audioBase64 = lectureAudioBase64Ref.current;
+    if (!audioBase64 || isProcessingRef.current) return;
+
+    isProcessingRef.current = true;
+    setProcessingStep("transcribing");
+    setState("processing");
+    try {
+      const apiUrl = getApiUrl();
+      const authHeaders = await getAuthHeaders();
+      const uploadRes = await fetch(
+        new URL("/api/ai/transcription/upload", apiUrl).toString(),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          credentials: "include",
+          body: JSON.stringify({
+            audioBase64,
+            durationMinutes: Math.max(1, Math.ceil(duration / 60)),
+          }),
+        },
+      );
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json().catch(() => null);
+        if (errorData?.type === "PAYWALL_REQUIRED") {
+          throw new PaywallRequiredError(
+            errorData.message ?? errorData.error ?? "Upgrade required",
+          );
+        }
+        throw new Error(
+          errorData?.message ?? errorData?.error ?? "Failed to upload audio",
+        );
+      }
+
+      const { jobId } = await uploadRes.json();
+      if (!jobId) throw new Error("No job ID returned from upload");
+      const jobResult = await pollJobStatus(jobId);
+      if (jobResult.error) throw new Error(jobResult.error);
+      const transcriptText = jobResult.transcript || "";
+      if (!transcriptText) throw new Error("Empty transcript received");
+
+      await storage.saveTranscript({
+        recordingId: `recording-${Date.now()}`,
+        topicId,
+        text: transcriptText,
+        timestamps: [],
+      });
+      if (recordingUriRef.current) {
+        await FileSystem.deleteAsync(recordingUriRef.current, {
+          idempotent: true,
+        }).catch(() => {});
+        recordingUriRef.current = null;
+      }
+      lectureAudioBase64Ref.current = null;
+      setSavedTranscript(transcriptText);
+      setProcessingStep("complete");
+      setState("choosing");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({
+        type: "success",
+        title: "Transcription complete!",
+        message: "Choose what study materials to create",
+      });
+    } catch (error) {
+      console.error("Manual transcription error:", error);
+      await storage.updateTopic(topicId, { status: "pending" }).catch(() => {});
+      if (error instanceof PaywallRequiredError) {
+        setState("workflow-choice");
+        showToast({ type: "warning", title: "Upgrade required", message: error.message });
+        (navigation as any).navigate("Billing");
+      } else {
+        setState("workflow-choice");
+        showToast({
+          type: "error",
+          title: "Transcription failed",
+          message: error instanceof Error ? error.message : "Please try again",
+        });
+      }
+    } finally {
+      isProcessingRef.current = false;
+    }
+  };
+
   const stopRecording = async () => {
   if (state !== "recording" || isProcessingRef.current) return;
   if (!audioRecorder) return;
@@ -271,9 +536,6 @@ export default function RecordScreen() {
 
       setProcessingStep("upload");
       await storage.updateTopic(topicId, { status: "transcribing" });
-
-      const apiUrl = getApiUrl();
-      const authHeaders = await getAuthHeaders();
 
       if (!recordingUri) {
         showToast({
@@ -342,111 +604,41 @@ export default function RecordScreen() {
           `[Record] Audio base64 length: ${audioBase64.length} chars (~${Math.round(audioBase64.length / 1370)}KB)`,
         );
 
-      setProcessingStep("transcribe");
-
-      const uploadUrl = new URL(
-        "/api/ai/transcription/upload",
-        apiUrl,
-      ).toString();
-      if (__DEV__) console.log("[Record] Uploading to:", uploadUrl);
-
-      const uploadRes = await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          audioBase64,
-          durationMinutes: Math.max(1, Math.ceil(duration / 60)),
-        }),
-      });
-
-      if (__DEV__)
-        console.log("[Record] Upload response status:", uploadRes.status);
-
-      if (!uploadRes.ok) {
-        const errorText = await uploadRes.text().catch(() => "");
-        if (__DEV__)
-          console.error(
-            "[Record] Upload failed:",
-            uploadRes.status,
-            errorText,
-          );
-        let errorMessage = "Failed to upload audio";
-        let isPaywall = false;
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-          isPaywall = errorData.type === "PAYWALL_REQUIRED";
-        } catch {}
-        if (isPaywall) throw new PaywallRequiredError(errorMessage);
-        throw new Error(`${errorMessage} (${uploadRes.status})`);
-      }
-
-      const uploadData = await uploadRes.json();
-      const jobId = uploadData.jobId;
-
-      if (!jobId) {
-        throw new Error("No job ID returned from upload");
-      }
-
-      const jobResult = await pollJobStatus(jobId);
-
-      if (jobResult.error) {
-        throw new Error(jobResult.error);
-      }
-
-      const transcriptText = jobResult.transcript || "";
-      if (!transcriptText) {
-        throw new Error("Empty transcript received");
-      }
-
-      await storage.saveTranscript({
-        recordingId: `recording-${Date.now()}`,
-        topicId,
-        text: transcriptText,
-        timestamps: [],
-      });
-
-      if (recordingUri) {
-        try {
-          await FileSystem.deleteAsync(recordingUri, { idempotent: true });
-        } catch {}
-      }
-
-      setSavedTranscript(transcriptText);
-      setProcessingStep("complete");
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast({
-        type: "success",
-        title: "Transcription complete!",
-        message: "Choose what study materials to create",
-      });
-      setState("choosing");
+      recordingUriRef.current = recordingUri;
+      lectureAudioBase64Ref.current = audioBase64;
+      setProcessingStep("queued");
+      setState("workflow-choice");
     } catch (error) {
       console.error("Processing error:", error);
       await storage.updateTopic(topicId, { status: "pending" }).catch(() => {});
       if (__DEV__) console.log("[Record] Topic status -> pending (processing error catch)");
       if (isMountedRef.current) {
-        setState("idle");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        if (error instanceof PaywallRequiredError) {
+        if (
+          error instanceof PaywallRequiredError ||
+          (error as Error & { type?: string }).type === "PAYWALL_REQUIRED"
+        ) {
+          setState("idle");
           showToast({
             type: "warning",
             title: "Upgrade required",
-            message: error.message,
+            message:
+              error instanceof Error ? error.message : "Upgrade required",
           });
           (navigation as any).navigate("Billing");
           return;
         }
         const errorMessage =
           error instanceof Error ? error.message : "Please try again";
+        setPipelineError(errorMessage);
+        setState(
+          lectureJobIdRef.current && lectureAudioBase64Ref.current
+            ? "failed"
+            : "idle",
+        );
         showToast({
           type: "error",
-          title: "Processing failed",
+          title: "Lecture Autopilot failed",
           message: errorMessage,
         });
       }
@@ -812,72 +1004,55 @@ export default function RecordScreen() {
   }));
 
   const getProcessingSteps = (): ProcessingStep[] => {
-    if (state === "processing") {
-      return [
-        {
-          id: "upload",
-          label: "Uploading audio",
-          status:
-            processingStep === "upload"
-              ? "active"
-              : ["transcribe", "complete"].includes(processingStep)
-                ? "completed"
-                : "pending",
-        },
-        {
-          id: "transcribe",
-          label: "Transcribing audio",
-          status:
-            processingStep === "transcribe"
-              ? "active"
-              : processingStep === "complete"
-                ? "completed"
-                : "pending",
-        },
-      ];
-    }
-
-    const steps: ProcessingStep[] = [];
-    const order = ["notes", "flashcards", "quiz", "complete"];
-    const stepIndex = (s: string) => order.indexOf(s);
-
-    if (materialSelection.notes) {
-      steps.push({
-        id: "notes",
+    const order = [
+      "upload",
+      "queued",
+      "transcribing",
+      "source-locking",
+      "generating-notes",
+      "generating-flashcards",
+      "generating-quiz",
+      "complete",
+    ];
+    const currentIndex = order.indexOf(processingStep);
+    const definitions = [
+      { id: "upload", label: "Uploading audio", enabled: true },
+      { id: "queued", label: "Starting secure pipeline", enabled: true },
+      { id: "transcribing", label: "Transcribing audio", enabled: true },
+      {
+        id: "source-locking",
+        label: "Locking source evidence",
+        enabled: true,
+      },
+      {
+        id: "generating-notes",
         label: "Generating notes",
-        status:
-          processingStep === "notes"
-            ? "active"
-            : stepIndex(processingStep) > stepIndex("notes")
-              ? "completed"
-              : "pending",
-      });
-    }
-    if (materialSelection.flashcards) {
-      steps.push({
-        id: "flashcards",
+        enabled: materialSelection.notes,
+      },
+      {
+        id: "generating-flashcards",
         label: "Creating flashcards",
-        status:
-          processingStep === "flashcards"
-            ? "active"
-            : stepIndex(processingStep) > stepIndex("flashcards")
-              ? "completed"
-              : "pending",
-      });
-    }
-    if (materialSelection.quiz) {
-      steps.push({
-        id: "quiz",
+        enabled: materialSelection.flashcards,
+      },
+      {
+        id: "generating-quiz",
         label: "Building quiz",
+        enabled: materialSelection.quiz,
+      },
+    ];
+
+    return definitions
+      .filter((step) => step.enabled)
+      .map((step): ProcessingStep => ({
+        id: step.id,
+        label: step.label,
         status:
-          processingStep === "quiz"
+          processingStep === step.id
             ? "active"
-            : processingStep === "complete"
+            : processingStep === "complete" || currentIndex > order.indexOf(step.id)
               ? "completed"
               : "pending",
-      });
-    }
-    return steps;
+      }));
   };
 
   const renderContent = () => {
@@ -983,6 +1158,53 @@ export default function RecordScreen() {
                 {"We'll create notes, flashcards, and quizzes for you"}
               </ThemedText>
             </View>
+
+            <Card style={styles.autopilotCard}>
+              <ThemedText type="small" style={styles.autopilotLabel}>
+                Lecture Autopilot will create
+              </ThemedText>
+              <View style={styles.autopilotOptions}>
+                {(
+                  [
+                    ["notes", "file-text", "Notes"],
+                    ["flashcards", "layers", "Cards"],
+                    ["quiz", "award", "Quiz"],
+                  ] as const
+                ).map(([key, icon, label]) => {
+                  const selected = materialSelection[key];
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => toggleMaterial(key)}
+                      style={[
+                        styles.autopilotOption,
+                        {
+                          borderColor: selected ? theme.link : theme.border,
+                          backgroundColor: selected
+                            ? theme.link + "12"
+                            : theme.backgroundDefault,
+                        },
+                      ]}
+                    >
+                      <Icon
+                        name={selected ? "check" : icon}
+                        size={16}
+                        color={selected ? theme.link : theme.textSecondary}
+                      />
+                      <ThemedText
+                        type="small"
+                        style={{
+                          color: selected ? theme.link : theme.textSecondary,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </Card>
 
             {/* Waveform placeholder bars */}
             <View style={styles.waveformPlaceholder}>
@@ -1117,13 +1339,13 @@ export default function RecordScreen() {
                 <Icon name="loader" size={32} color={theme.info} />
               </View>
               <ThemedText type="h2" style={styles.heading}>
-                Transcribing Audio
+                Processing Lecture
               </ThemedText>
               <ThemedText
                 type="body"
                 style={[styles.instruction, { color: theme.textSecondary }]}
               >
-                This only takes a moment...
+                Your recording is being prepared.
               </ThemedText>
             </View>
 
@@ -1136,6 +1358,112 @@ export default function RecordScreen() {
               </View>
               <ProcessingTimeline steps={getProcessingSteps()} />
             </Card>
+          </View>
+        );
+
+      case "workflow-choice":
+        return (
+          <View style={styles.centerContent}>
+            <View style={styles.processingHeader}>
+              <View
+                style={[
+                  styles.completedIconContainer,
+                  { backgroundColor: theme.success + "15" },
+                ]}
+              >
+                <Icon name="check" size={40} color={theme.success} />
+              </View>
+              <ThemedText type="h2" style={styles.heading}>
+                Recording Ready
+              </ThemedText>
+              <ThemedText
+                type="body"
+                style={[styles.instruction, { color: theme.textSecondary }]}
+              >
+                Choose how you want to create study materials.
+              </ThemedText>
+            </View>
+
+            <Card style={[styles.processingCard, { marginBottom: Spacing.xl }]}>
+              <ThemedText type="body" style={styles.materialLabel}>
+                Lecture Autopilot
+              </ThemedText>
+              <ThemedText
+                type="small"
+                style={{ color: theme.textSecondary, marginTop: Spacing.xs }}
+              >
+                Create source-linked notes, flashcards, and a quiz in one secure pipeline.
+              </ThemedText>
+            </Card>
+
+            <View style={styles.completedActions}>
+              <Button
+                onPress={startLectureAutopilotForRecordedAudio}
+                size="lg"
+                fullWidth
+              >
+                Use Lecture Autopilot
+              </Button>
+              <Button
+                onPress={continueWithManualGeneration}
+                variant="secondary"
+                size="lg"
+                fullWidth
+                style={styles.secondaryButton}
+              >
+                Continue Manually
+              </Button>
+            </View>
+          </View>
+        );
+
+      case "failed":
+        return (
+          <View style={styles.centerContent}>
+            <View style={styles.processingHeader}>
+              <View
+                style={[
+                  styles.processingIconContainer,
+                  { backgroundColor: theme.error + "15" },
+                ]}
+              >
+                <Icon name="alert-circle" size={32} color={theme.error} />
+              </View>
+              <ThemedText type="h2" style={styles.heading}>
+                Processing stopped
+              </ThemedText>
+              <ThemedText
+                type="body"
+                style={[styles.instruction, { color: theme.textSecondary }]}
+              >
+                {pipelineError || "Lecture Autopilot could not finish."}
+              </ThemedText>
+            </View>
+            <View style={styles.completedActions}>
+              <Button onPress={retryFailedPipeline} size="lg" fullWidth>
+                Retry This Lecture
+              </Button>
+              <Button
+                onPress={async () => {
+                  if (recordingUriRef.current) {
+                    await FileSystem.deleteAsync(recordingUriRef.current, {
+                      idempotent: true,
+                    }).catch(() => {});
+                  }
+                  recordingUriRef.current = null;
+                  lectureAudioBase64Ref.current = null;
+                  lectureJobIdRef.current = null;
+                  setPipelineError("");
+                  setState("idle");
+                }}
+                variant="secondary"
+                size="lg"
+                fullWidth
+                style={styles.secondaryButton}
+              >
+                Start a New Recording
+              </Button>
+            </View>
           </View>
         );
 
@@ -1397,6 +1725,29 @@ export default function RecordScreen() {
               </View>
             </Card>
 
+            <Pressable
+              onPress={handleAddWhiteboardPhoto}
+              disabled={isCapturingPhoto}
+              style={[
+                styles.whiteboardButton,
+                {
+                  borderColor: theme.border,
+                  opacity: isCapturingPhoto ? 0.6 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Add whiteboard photo"
+            >
+              <Icon name="camera" size={18} color={theme.link} />
+              <ThemedText type="body" style={{ color: theme.link, fontWeight: "600" }}>
+                {isCapturingPhoto
+                  ? "Reading photo..."
+                  : whiteboardPhotosAdded > 0
+                    ? `Add Another Whiteboard Photo (${whiteboardPhotosAdded} added)`
+                    : "Add Whiteboard Photo"}
+              </ThemedText>
+            </Pressable>
+
             <View style={styles.completedActions}>
               <Button onPress={handleDone} size="lg" fullWidth>
                 View Study Materials
@@ -1473,6 +1824,28 @@ const styles = StyleSheet.create({
     gap: 5,
     height: 56,
     marginBottom: Spacing["2xl"],
+  },
+  autopilotCard: {
+    width: "100%",
+    marginBottom: Spacing.xl,
+  },
+  autopilotLabel: {
+    fontWeight: "600",
+    marginBottom: Spacing.sm,
+  },
+  autopilotOptions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  autopilotOption: {
+    flex: 1,
+    minHeight: 40,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
   },
   waveBar: {
     width: 5,

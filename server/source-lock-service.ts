@@ -37,6 +37,19 @@ export interface CreateArtifactCitationsInput {
   generationRunId?: string;
 }
 
+export interface BatchArtifactCitationItem {
+  target: CitationArtifactTarget;
+  segmentIds: string[];
+}
+
+export interface CreateArtifactCitationsBatchInput {
+  sourceId: string;
+  revisionId: string;
+  allowedSegmentIds: readonly string[];
+  generationRunId?: string;
+  items: BatchArtifactCitationItem[];
+}
+
 function isRetryableTransactionError(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -556,7 +569,174 @@ function citationTargetData(target: CitationArtifactTarget) {
           flashcardId: null,
           quizQuestionId: null,
           topicId: target.topicId,
-        };
+      };
+}
+
+function citationTargetKey(target: CitationArtifactTarget): string {
+  return target.kind === "FLASHCARD"
+    ? `${target.kind}:${target.flashcardId}`
+    : target.kind === "QUIZ_QUESTION"
+      ? `${target.kind}:${target.quizQuestionId}`
+      : `${target.kind}:${target.topicId}`;
+}
+
+async function assertOwnedCitationTargets(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  courseId: string,
+  targets: CitationArtifactTarget[],
+): Promise<void> {
+  const flashcardIds = [
+    ...new Set(
+      targets.flatMap((target) =>
+        target.kind === "FLASHCARD" ? [target.flashcardId] : [],
+      ),
+    ),
+  ];
+  const quizQuestionIds = [
+    ...new Set(
+      targets.flatMap((target) =>
+        target.kind === "QUIZ_QUESTION" ? [target.quizQuestionId] : [],
+      ),
+    ),
+  ];
+  const topicIds = [
+    ...new Set(
+      targets.flatMap((target) =>
+        target.kind === "TOPIC_NOTES" ? [target.topicId] : [],
+      ),
+    ),
+  ];
+
+  const [flashcards, quizQuestions, topics] = await Promise.all([
+    flashcardIds.length
+      ? tx.flashcard.findMany({
+          where: {
+            id: { in: flashcardIds },
+            topic: { userId, courseId, course: { userId } },
+          },
+          select: { id: true },
+        })
+      : [],
+    quizQuestionIds.length
+      ? tx.quizQuestion.findMany({
+          where: {
+            id: { in: quizQuestionIds },
+            quiz: { topic: { userId, courseId, course: { userId } } },
+          },
+          select: { id: true },
+        })
+      : [],
+    topicIds.length
+      ? tx.topic.findMany({
+          where: { id: { in: topicIds }, userId, courseId, course: { userId } },
+          select: { id: true },
+        })
+      : [],
+  ]);
+
+  if (
+    flashcards.length !== flashcardIds.length ||
+    quizQuestions.length !== quizQuestionIds.length ||
+    topics.length !== topicIds.length
+  ) {
+    throw new AppError(404, "NOT_FOUND", "Artifact not found");
+  }
+}
+
+export async function createArtifactCitationsBatch(
+  userId: string,
+  courseId: string,
+  input: CreateArtifactCitationsBatchInput,
+): Promise<void> {
+  if (input.items.length === 0) return;
+
+  const targetKeys = input.items.map((item) => citationTargetKey(item.target));
+  if (new Set(targetKeys).size !== targetKeys.length) {
+    throw new AppError(
+      400,
+      "DUPLICATE_CITATION_TARGET",
+      "Citation targets must be unique within a batch",
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await assertOwnedCourse(tx, courseId, userId);
+    await assertOwnedCitationTargets(
+      tx,
+      userId,
+      courseId,
+      input.items.map((item) => item.target),
+    );
+
+    if (input.generationRunId) {
+      const generationRun = await tx.generationRun.findFirst({
+        where: {
+          id: input.generationRunId,
+          courseId,
+          course: { userId },
+        },
+        select: { id: true },
+      });
+      if (!generationRun) {
+        throw new AppError(404, "NOT_FOUND", "Generation run not found");
+      }
+    }
+
+    const requestedSegmentIds = input.items.flatMap((item) => item.segmentIds);
+    const uniqueSegmentIds = [...new Set(requestedSegmentIds)];
+    const segments = await validateSourceSegmentIdsInTransaction(
+      tx,
+      userId,
+      courseId,
+      uniqueSegmentIds,
+      {
+        expectedSourceId: input.sourceId,
+        expectedRevisionId: input.revisionId,
+        allowedSegmentIds: input.allowedSegmentIds,
+      },
+    );
+    const segmentsById = new Map(segments.map((segment) => [segment.id, segment]));
+
+    for (const item of input.items) {
+      if (
+        item.segmentIds.length === 0 ||
+        new Set(item.segmentIds).size !== item.segmentIds.length
+      ) {
+        throw new AppError(
+          400,
+          "INVALID_SOURCE_SEGMENTS",
+          "Each citation target requires unique source segment IDs",
+        );
+      }
+    }
+
+    await tx.artifactCitation.createMany({
+      data: input.items.flatMap((item) => {
+        const targetData = citationTargetData(item.target);
+        return item.segmentIds.map((segmentId) => {
+          const segment = segmentsById.get(segmentId);
+          if (!segment) {
+            throw new AppError(
+              400,
+              "INVALID_SOURCE_SEGMENTS",
+              "Citation segment was not validated",
+            );
+          }
+          return {
+            ...targetData,
+            sourceSegmentId: segment.id,
+            generationRunId: input.generationRunId ?? null,
+            evidenceExcerpt: segment.content.slice(
+              0,
+              MAX_CITATION_EXCERPT_LENGTH,
+            ),
+          };
+        });
+      }),
+      skipDuplicates: true,
+    });
+  });
 }
 
 export async function createArtifactCitations(

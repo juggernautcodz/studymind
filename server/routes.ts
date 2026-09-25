@@ -38,6 +38,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   try {
+    const lectureAutopilotRoutes = (await import("./lecture-autopilot")).default;
+    safeMount(app, "/api", lectureAutopilotRoutes, "lecture autopilot");
+  } catch (err) {
+    console.warn("Failed to load lecture autopilot routes:", err);
+  }
+
+  try {
     const authRoutes = (await import("./auth")).default;
     safeMount(app, "/api/auth", authRoutes, "auth");
   } catch (err) {

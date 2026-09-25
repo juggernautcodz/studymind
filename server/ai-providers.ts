@@ -21,11 +21,11 @@ import {
   AI_RATE_LIMIT,
   TRANSCRIPTION_RATE_LIMIT,
 } from "./constants";
-import OpenAI from "openai";
 import {
   speechToText,
   ensureCompatibleFormat,
 } from "./replit_integrations/audio/client";
+import { IS_PRODUCTION, USE_REAL_AI, openai } from "./lib/ai-runtime";
 
 const router = Router();
 
@@ -33,12 +33,6 @@ const aiRateLimit = rateLimit("ai-general", AI_RATE_LIMIT);
 const transcriptionRateLimit = rateLimit(
   "ai-transcription",
   TRANSCRIPTION_RATE_LIMIT,
-);
-
-const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const USE_REAL_AI = !!(
-  process.env.AI_INTEGRATIONS_OPENAI_API_KEY &&
-  process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
 );
 
 console.log(
@@ -53,13 +47,6 @@ if (USE_REAL_AI) {
 } else {
   console.log("[AI Providers] Running in mock mode (dev only)");
 }
-
-const openai = USE_REAL_AI
-  ? new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    })
-  : null;
 
 const AI_UNAVAILABLE_RESPONSE = {
   error: "AI temporarily unavailable",

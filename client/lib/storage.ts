@@ -517,6 +517,15 @@ export const storage = {
     return newCards;
   },
 
+  async cacheServerFlashcards(cards: Flashcard[]): Promise<void> {
+    const flashcards = await getItems<Flashcard>(KEYS.FLASHCARDS);
+    const incomingIds = new Set(cards.map((card) => card.id));
+    await setItems(KEYS.FLASHCARDS, [
+      ...flashcards.filter((card) => !incomingIds.has(card.id)),
+      ...cards,
+    ]);
+  },
+
   async getQuiz(
     topicId: string,
   ): Promise<{ quiz: Quiz; questions: QuizQuestion[] } | null> {
@@ -564,6 +573,27 @@ export const storage = {
     await setItems(KEYS.QUIZ_QUESTIONS, [...allQuestions, ...newQuestions]);
 
     return { quiz, questions: newQuestions };
+  },
+
+  async cacheServerQuiz(
+    quiz: Quiz,
+    questions: QuizQuestion[],
+  ): Promise<void> {
+    const quizzes = await getItems<Quiz>(KEYS.QUIZZES);
+    const allQuestions = await getItems<QuizQuestion>(KEYS.QUIZ_QUESTIONS);
+    const incomingQuestionIds = new Set(questions.map((question) => question.id));
+    await Promise.all([
+      setItems(KEYS.QUIZZES, [
+        ...quizzes.filter((existing) => existing.id !== quiz.id),
+        quiz,
+      ]),
+      setItems(KEYS.QUIZ_QUESTIONS, [
+        ...allQuestions.filter(
+          (question) => !incomingQuestionIds.has(question.id),
+        ),
+        ...questions,
+      ]),
+    ]);
   },
 
   async getNotesByTopics(topicIds: string[]): Promise<Notes[]> {
@@ -628,6 +658,15 @@ export const storage = {
     data: Omit<Transcript, "id" | "createdAt">,
   ): Promise<Transcript> {
     const transcripts = await getItems<Transcript>(KEYS.TRANSCRIPTS);
+    const existingIndex = transcripts.findIndex(
+      (transcript) => transcript.recordingId === data.recordingId,
+    );
+    if (existingIndex >= 0) {
+      const transcript = { ...transcripts[existingIndex], ...data };
+      transcripts[existingIndex] = transcript;
+      await setItems(KEYS.TRANSCRIPTS, transcripts);
+      return transcript;
+    }
     const transcript: Transcript = {
       ...data,
       id: uuidv4(),
