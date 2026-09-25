@@ -9,6 +9,7 @@ import { storage, setActiveUser } from "@/lib/storage";
 import { getApiUrl, setAuthExpiredCallback, clearAuthExpiredCallback, queryClient } from "@/lib/query-client";
 import { registerPushTokenWithServer } from "@/lib/notifications";
 import { hydrateFromServerIfEmpty } from "@/lib/serverSync";
+import { deleteAccountAfterServerConfirmation } from "@/lib/accountDeletion";
 import type { User } from "@/types";
 
 interface AuthContextType {
@@ -216,34 +217,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteAccount = async () => {
-    try {
-      const token = await storage.getAuthToken();
-      const baseUrl = getApiUrl();
-      const headers: Record<string, string> = {};
-
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(
-        new URL("/api/auth/account", baseUrl).toString(),
-        {
+    await deleteAccountAfterServerConfirmation({
+      getAuthToken: () => storage.getAuthToken(),
+      deleteFromServer: (token) =>
+        fetch(new URL("/api/auth/account", getApiUrl()).toString(), {
           method: "DELETE",
-          headers,
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Server deletion failed");
-      }
-    } catch (error) {
-      console.log("Backend account deletion failed, clearing locally");
-    }
-
-    await storage.clearAll();
-    setActiveUser(null);
-    queryClient.clear();
-    setUser(null);
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      clearLocalAccount: () => storage.clearAll(),
+      detachActiveUser: () => setActiveUser(null),
+      clearQueryCache: () => queryClient.clear(),
+      clearUserState: () => setUser(null),
+    });
   };
 
   return (

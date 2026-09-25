@@ -2,9 +2,9 @@
 
 Branch: `studymind-2.0`
 
-Starting HEAD for Phase 7B: `9c8ea3c5c2929acc6c9c46b20c2671eda4d8dd8d`
+Starting HEAD for Phase 8: `73cdaec56fd60266dc44adb58610ac19db58cee4`
 
-Current phase: Phase 7B — Personalized Study Today client integration implemented, not committed
+Current phase: Phase 8 — full regression audit performed; unresolved findings make Phase 9 phone testing **NOT READY**
 
 ## Completed phases
 
@@ -14,6 +14,55 @@ Current phase: Phase 7B — Personalized Study Today client integration implemen
 4. Lecture Autopilot
 5. Mastery
 6. Exam Readiness
+7. Personalized Study Today
+
+## Phase 8 full regression audit
+
+Audit result: **NOT READY for Phase 9 phone testing**.
+
+Confirmed safe areas:
+
+- The Phase 1–7 canonical Course Brain, SourceLock, Lecture Autopilot, Mastery, Exam Readiness, and Study Today server queries enforce authenticated-user ownership through their direct records and joins.
+- Course Brain, Exam Readiness, Study Today, and Mastery client/server response shapes align for IDs, enum values, optional fields, nullability, and error/status handling.
+- The new concepts, mastery records/events, sources/provenance, exam scope/readiness, and Study Today recommendations remain PostgreSQL-backed or dynamically derived from PostgreSQL. No new Phase 1–7 durable domain is persisted only in AsyncStorage.
+- The SourceLock, Mastery, quiz-submission-idempotency, and Exam Readiness migrations are additive and ordered consistently. Their foreign keys, indexes, uniqueness constraints, and delete cascades are ordered after their prerequisites.
+- Production build/startup paths contain no schema mutation or `prisma db push` command. Prisma generation and the server bundle build do not apply migrations.
+- Privacy export includes SourceLock history, concepts, mastery records/events, and exam concept scopes. Cascades cover the new Phase 1–7 records during owned course/topic/user deletion.
+
+Remediated findings:
+
+- **HIGH — account deletion could report success without deleting the account.** Phase 8A changed both `DELETE /api/auth/data` and `DELETE /api/auth/account` to require `authMiddleware`; missing, invalid, expired, and legacy guest tokens now return `401` and cannot fall back to the shared guest identity. The client now requires a stored token, propagates network/non-success responses, and clears local account/auth state only after the server confirms deletion. Settings therefore retains the signed-in state on failure and can show its existing retryable error message. Normal logout remains unchanged.
+
+Remaining unresolved findings:
+
+- **HIGH — Study Today actions do not complete durable study work.** `REVIEW_FLASHCARDS` opens the Topic Cards tab, which has no correct/incorrect review action and therefore does not update due dates or mastery. `TAKE_QUIZ` opens the Topic Quiz tab, which calculates results only in component state and never submits a `QuizAttempt`, so quiz mastery evidence is not created. This regresses the prior Study Today flow, which posted flashcard answers, and prevents the new recommendations from closing their own evidence gaps.
+- **HIGH — server-backed recommendations can open empty local tabs.** Study Today ranks PostgreSQL-owned flashcards/quizzes/material, but TopicScreen reads those destinations only from AsyncStorage. Fresh-device hydration pulls semester/course/topic hierarchy but not notes, flashcards, or quizzes. A recommendation can therefore advertise a server capability that appears empty when opened on another device. Resolving this requires a bounded server-to-cache reconciliation contract and durable quiz identity, not a partial UI-only patch.
+- **MEDIUM — ordinary server startup can mutate data.** Route registration calls `ensureAnonymousUserExists()`, which conditionally creates the shared guest user. No schema mutation occurs, but startup is not database-read-only. Removing it safely must be coordinated with the remaining legacy guest middleware behavior.
+- **MEDIUM — Exam Readiness migration assumes every legacy `Exam.topicIds` value is a valid JSON array.** Three unguarded `::jsonb`/`jsonb_array_elements_text` expressions can abort the migration on malformed or non-array legacy data. The migration should add a reviewed preflight/guard before deployment; it was not changed or applied during this audit.
+
+Validation performed:
+
+- `npm run check:types` — passed
+- `npm run server:build` — passed; the generated tracked bundle was restored after the check
+- `npm run test:study-today` — 11 passed
+- `npm run test:study-today-client` — 5 passed
+- `npm run test:exam-readiness` — 10 passed
+- `npm run test:exam-readiness-client` — 7 passed
+- `npm run test:account-deletion` — 8 passed; the server route harness uses mocked Prisma methods and cannot contact a database
+- Focused Prettier check for the new account-deletion helper, tests, and package script — passed
+- `server/auth.ts` and `client/contexts/AuthContext.tsx` remain part of the pre-existing whole-file formatting backlog; their Phase 8A edits were kept minimal rather than reformatting unrelated code
+- `npx prisma validate` — passed without connecting to or mutating a database
+- `git diff --check` — passed
+- No standalone Course Brain, Mastery, or quiz regression tests exist in the repository
+- Full `npm run check:format` remains blocked by 70 pre-existing formatting deviations; no broad reformat was performed
+- `npm run lint` remains blocked before linting because `eslint-plugin-prettier/recommended` is referenced but not installed; no dependency was installed or changed
+
+No production or shared database command was run. No migration was applied, no `prisma db push` was run, and no production database mutation was performed. The following migrations remain unapplied:
+
+- `prisma/migrations/20260924010000_add_sourcelock/migration.sql`
+- `prisma/migrations/20260924020000_add_mastery/migration.sql`
+- `prisma/migrations/20260924021000_add_quiz_submission_idempotency/migration.sql`
+- `prisma/migrations/20260924030000_add_exam_readiness/migration.sql`
 
 ## Phase 6 additions
 

@@ -327,7 +327,7 @@ router.put(
 
 router.delete(
   "/data",
-  guestOrAuthMiddleware,
+  authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user!.id;
@@ -364,7 +364,7 @@ router.delete(
 
 router.delete(
   "/account",
-  guestOrAuthMiddleware,
+  authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user!.id;
