@@ -12,6 +12,7 @@ import MindmapScreen from "@/screens/MindmapScreen";
 import BillingScreen from "@/screens/BillingScreen";
 import StudyTodayScreen from "@/screens/StudyTodayScreen";
 import ExamModeScreen from "@/screens/ExamModeScreen";
+import ExamReadinessScreen from "@/screens/ExamReadinessScreen";
 import SearchScreen from "@/screens/SearchScreen";
 import LibraryScreen from "@/screens/LibraryScreen";
 import TopicScreen from "@/screens/TopicScreen";
@@ -36,16 +37,19 @@ export type RootStackParamList = {
   Billing: undefined;
   StudyToday: undefined;
   ExamMode: undefined;
+  ExamReadiness: { examId: string };
   Search: undefined;
   Library: undefined;
-  WritingLab: {
-    initialMode?: "essay" | "rewrite" | "clean";
-    initialText?: string;
-    sourceNoteId?: string;
-    sourceTopicId?: string;
-    sourceNoteTitle?: string;
-    sourceTopicName?: string;
-  } | undefined;
+  WritingLab:
+    | {
+        initialMode?: "essay" | "rewrite" | "clean";
+        initialText?: string;
+        sourceNoteId?: string;
+        sourceTopicId?: string;
+        sourceNoteTitle?: string;
+        sourceTopicName?: string;
+      }
+    | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -141,6 +145,11 @@ export default function RootStackNavigator() {
             name="ExamMode"
             component={ExamModeScreen}
             options={{ headerTitle: "Exam Mode" }}
+          />
+          <Stack.Screen
+            name="ExamReadiness"
+            component={ExamReadinessScreen}
+            options={{ headerTitle: "Exam Readiness" }}
           />
           <Stack.Screen
             name="Search"

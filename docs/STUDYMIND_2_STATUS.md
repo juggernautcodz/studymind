@@ -2,9 +2,9 @@
 
 Branch: `studymind-2.0`
 
-Starting HEAD for this phase: `b5965c25b308ee6c680b7adfe306ff476e5f922d`
+Starting HEAD for Phase 6B: `ec271d72675c40c5eb43c3314f934011bee00b72`
 
-Current phase: Phase 6A — Exam Readiness backend/domain foundation implemented, not committed
+Current phase: Phase 6B — Exam Readiness mobile integration implemented, not committed
 
 ## Completed phases
 
@@ -23,6 +23,9 @@ Current phase: Phase 6A — Exam Readiness backend/domain foundation implemented
 - Added idempotent exam concept-scope replacement.
 - Added one canonical deterministic server-side readiness calculation from persisted `ConceptMastery` data.
 - Included exams and their concept scope in the authenticated privacy export; delete-data remains cascade-safe.
+- Added a typed mobile readiness client backed only by `GET /api/exams/:id/readiness`.
+- Added an Exam Readiness screen reached from existing Course Brain exam rows. It presents the server score only when evidence exists, makes sparse coverage explicit, and lists strong, developing, weak, unassessed concepts, and server drivers.
+- Preserved the existing local Exam Mode flow. No parallel client-side readiness calculation or local persistence was introduced.
 
 ## API routes
 
@@ -74,11 +77,18 @@ Previously committed migrations also remain unapplied:
 - duplicate ID normalization
 - preservation of Phase 5 mastery inputs
 
+`client/lib/examReadinessPresentation.test.ts` covers:
+
+- normal, sparse, no-scope, and no-evidence presentation states
+- loading and error/not-found state selection
+- strong, weak, and unassessed concept grouping
+
 Safe checks completed:
 
 - `npx prisma validate`
 - `npx prisma generate`
 - `npm run test:exam-readiness` — 10 passed
+- `npm run test:exam-readiness-client` — 7 passed
 - `npm run check:types`
 - `npm run server:build`
 - focused Prettier check for the changed TypeScript and package files
@@ -91,7 +101,7 @@ Validation limitations:
 ## Remaining Phase 6 work
 
 - Review and explicitly approve the additive migration before any deployment applies it.
-- Add client consumption/presentation of the readiness endpoint in a separately approved UI phase if desired.
+- Add an exam scope creation/editing flow only if a durable server-exam management surface is separately approved; the current mobile app has no existing editor to extend safely.
 - Perform live integration verification only after the prerequisite migrations are approved and deployed.
 
 Phase 7 Personalized Study Today has not been started.

@@ -2,6 +2,8 @@ import React from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useRoute } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { Card } from "@/components/Card";
 import { ErrorState } from "@/components/ErrorState";
@@ -14,17 +16,22 @@ import { useCourseBrain } from "@/lib/courseBrain";
 import { useCourseMastery, useRecalculateCourseMastery } from "@/lib/mastery";
 import { Button } from "@/components/Button";
 import { BorderRadius, Spacing } from "@/constants/theme";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 export default function CourseBrainScreen() {
   const route = useRoute<any>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const courseId = route.params?.courseId as string;
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const { data: brain, isLoading, error, refetch } = useCourseBrain(courseId);
-  const { data: mastery = [], refetch: refetchMastery } = useCourseMastery(courseId);
+  const { data: mastery = [], refetch: refetchMastery } =
+    useCourseMastery(courseId);
   const recalculate = useRecalculateCourseMastery(courseId);
 
-  if (isLoading) return <LoadingState fullScreen message="Loading Course Brain..." />;
+  if (isLoading)
+    return <LoadingState fullScreen message="Loading Course Brain..." />;
   if (error || !brain) {
     return (
       <ThemedView style={styles.errorContainer}>
@@ -80,7 +87,10 @@ export default function CourseBrainScreen() {
               : `Quiz accuracy: ${brain.quizPerformance.accuracyPercent}% (${brain.quizPerformance.score}/${brain.quizPerformance.questions})`}
           </ThemedText>
           {brain.lastActivityAt ? (
-            <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: Spacing.sm }}>
+            <ThemedText
+              type="small"
+              style={{ color: theme.textSecondary, marginTop: Spacing.sm }}
+            >
               Updated {new Date(brain.lastActivityAt).toLocaleDateString()}
             </ThemedText>
           ) : null}
@@ -109,28 +119,61 @@ export default function CourseBrainScreen() {
           {mastery.length === 0 ? (
             <>
               <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Complete a quiz or review flashcards to measure understanding by topic.
+                Complete a quiz or review flashcards to measure understanding by
+                topic.
               </ThemedText>
-              <Button onPress={() => recalculate.mutate()} disabled={recalculate.isPending} style={{ marginTop: Spacing.md }}>
+              <Button
+                onPress={() => recalculate.mutate()}
+                disabled={recalculate.isPending}
+                style={{ marginTop: Spacing.md }}
+              >
                 {recalculate.isPending ? "Calculating..." : "Calculate Mastery"}
               </Button>
             </>
-          ) : mastery.slice().sort((a, b) => (a.score ?? -1) - (b.score ?? -1)).map((item) => (
-            <View key={item.conceptId} style={styles.masteryRow}>
-              <View style={{ flex: 1 }}>
-                <ThemedText type="body">{item.name}</ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                  {item.evidenceCount
-                    ? `${item.evidenceCount} evidence events · ${Math.round(item.confidence * 100)}% confidence · ${item.trend.toLowerCase()}`
-                    : "Not yet assessed"}
-                </ThemedText>
-              </View>
-              <ThemedText type="h4" style={{ color: item.score === null ? theme.textSecondary : item.score >= 0.7 ? theme.success : theme.warning }}>
-                {item.score === null ? "—" : `${Math.round(item.score * 100)}%`}
-              </ThemedText>
-            </View>
-          ))}
-          <Button onPress={() => { recalculate.mutate(); void refetchMastery(); }} disabled={recalculate.isPending} variant="ghost" style={{ marginTop: Spacing.sm }}>
+          ) : (
+            mastery
+              .slice()
+              .sort((a, b) => (a.score ?? -1) - (b.score ?? -1))
+              .map((item) => (
+                <View key={item.conceptId} style={styles.masteryRow}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="body">{item.name}</ThemedText>
+                    <ThemedText
+                      type="small"
+                      style={{ color: theme.textSecondary }}
+                    >
+                      {item.evidenceCount
+                        ? `${item.evidenceCount} evidence events · ${Math.round(item.confidence * 100)}% confidence · ${item.trend.toLowerCase()}`
+                        : "Not yet assessed"}
+                    </ThemedText>
+                  </View>
+                  <ThemedText
+                    type="h4"
+                    style={{
+                      color:
+                        item.score === null
+                          ? theme.textSecondary
+                          : item.score >= 0.7
+                            ? theme.success
+                            : theme.warning,
+                    }}
+                  >
+                    {item.score === null
+                      ? "—"
+                      : `${Math.round(item.score * 100)}%`}
+                  </ThemedText>
+                </View>
+              ))
+          )}
+          <Button
+            onPress={() => {
+              recalculate.mutate();
+              void refetchMastery();
+            }}
+            disabled={recalculate.isPending}
+            variant="ghost"
+            style={{ marginTop: Spacing.sm }}
+          >
             Refresh Mastery
           </Button>
         </Card>
@@ -144,16 +187,34 @@ export default function CourseBrainScreen() {
           ) : (
             brain.exams.map((exam) => (
               <View key={exam.id} style={styles.examRow}>
-                <ThemedText type="body">{exam.name}</ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                  {new Date(exam.examDate).toLocaleDateString()}
-                </ThemedText>
+                <View style={styles.examText}>
+                  <ThemedText type="body">{exam.name}</ThemedText>
+                  <ThemedText
+                    type="small"
+                    style={{ color: theme.textSecondary }}
+                  >
+                    {new Date(exam.examDate).toLocaleDateString()}
+                  </ThemedText>
+                </View>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onPress={() =>
+                    navigation.navigate("ExamReadiness", { examId: exam.id })
+                  }
+                  accessibilityLabel={`View readiness for ${exam.name}`}
+                >
+                  Readiness
+                </Button>
               </View>
             ))
           )}
         </Card>
 
-        <ThemedText type="small" style={[styles.futureNote, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.futureNote, { color: theme.textSecondary }]}
+        >
           Mastery uses your quiz and flashcard practice evidence.
         </ThemedText>
       </ScrollView>
@@ -179,6 +240,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.sm,
   },
-  masteryRow: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.sm },
+  examText: { flex: 1, marginRight: Spacing.sm },
+  masteryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+  },
   futureNote: { textAlign: "center", marginTop: Spacing.lg },
 });
