@@ -31,6 +31,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   try {
+    const masteryRoutes = (await import("./mastery")).default;
+    safeMount(app, "/api/courses", masteryRoutes, "mastery");
+  } catch (err) {
+    console.warn("Failed to load mastery routes:", err);
+  }
+
+  try {
     const sourceLockRoutes = (await import("./source-lock")).default;
     safeMount(app, "/api", sourceLockRoutes, "SourceLock");
   } catch (err) {

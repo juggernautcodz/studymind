@@ -1,4 +1,5 @@
 import { Router, Response, NextFunction } from "express";
+import { randomUUID } from "node:crypto";
 import prisma from "./db";
 import { authMiddleware, AuthRequest, guestOrAuthMiddleware } from "./auth";
 import { checkUsageLimits, incrementUsage } from "./middleware";
@@ -26,6 +27,7 @@ import {
   ensureCompatibleFormat,
 } from "./replit_integrations/audio/client";
 import { IS_PRODUCTION, USE_REAL_AI, openai } from "./lib/ai-runtime";
+import { backfillCourseMastery } from "./mastery-service";
 
 const router = Router();
 
@@ -713,14 +715,14 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const quizId = req.params.quizId as string;
-      const { answers } = req.body;
+      const { answers, submissionId } = req.body;
 
       const quiz = await prisma.quiz.findFirst({
         where: {
           id: quizId,
           topic: { userId: req.user?.id ?? ANONYMOUS_USER_ID },
         },
-        include: { questions: true },
+        include: { questions: true, topic: { select: { courseId: true } } },
       });
 
       if (!quiz) {
@@ -741,15 +743,50 @@ router.post(
         };
       });
 
-      const attempt = await prisma.quizAttempt.create({
-        data: {
-          userId: req.user?.id ?? ANONYMOUS_USER_ID,
-          quizId,
-          score,
-          totalQuestions: quiz.questions.length,
-          answers: JSON.stringify(answers),
-        },
-      });
+      const userId = req.user?.id ?? ANONYMOUS_USER_ID;
+      const serializedAnswers = JSON.stringify(
+        Object.fromEntries(Object.entries(answers).sort(([left], [right]) => left.localeCompare(right))),
+      );
+      const isAuthenticated = userId !== ANONYMOUS_USER_ID;
+      const stableSubmissionId = isAuthenticated ? (submissionId ?? randomUUID()) : null;
+      const attempt = isAuthenticated
+        ? await prisma.quizAttempt.upsert({
+            where: {
+              userId_quizId_submissionId: {
+                userId,
+                quizId,
+                submissionId: stableSubmissionId!,
+              },
+            },
+            create: {
+              userId,
+              quizId,
+              submissionId: stableSubmissionId,
+              score,
+              totalQuestions: quiz.questions.length,
+              answers: serializedAnswers,
+            },
+            update: {},
+          })
+        : await prisma.quizAttempt.create({
+            data: {
+              userId,
+              quizId,
+              score,
+              totalQuestions: quiz.questions.length,
+              answers: serializedAnswers,
+            },
+          });
+
+      if (isAuthenticated && attempt.answers !== serializedAnswers) {
+        return res.status(409).json({ error: "submissionId was already used for different answers" });
+      }
+
+      // Mastery is an authenticated, durable course feature. Preserve the existing
+      // anonymous quiz flow without creating shared anonymous-user mastery records.
+      if (isAuthenticated) {
+        await backfillCourseMastery(userId, quiz.topic.courseId);
+      }
 
       res.json({
         attempt,

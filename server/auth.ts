@@ -425,6 +425,9 @@ router.get(
         entitlement,
         sources,
         generationRuns,
+        concepts,
+        conceptMasteries,
+        masteryEvents,
       ] =
         await Promise.all([
           prisma.user.findUnique({
@@ -510,6 +513,9 @@ router.get(
             where: { course: { userId } },
             orderBy: { createdAt: "asc" },
           }),
+          prisma.concept.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+          prisma.conceptMastery.findMany({ where: { userId }, orderBy: { updatedAt: "asc" } }),
+          prisma.masteryEvent.findMany({ where: { userId }, orderBy: { occurredAt: "asc" } }),
         ]);
 
       res.setHeader("Content-Disposition", `attachment; filename="studymind-export-${userId}.json"`);
@@ -528,6 +534,9 @@ router.get(
         purchases,
         sources,
         generationRuns,
+        concepts,
+        conceptMasteries,
+        masteryEvents,
       });
     } catch (error) {
       console.error("Data export error:", error);

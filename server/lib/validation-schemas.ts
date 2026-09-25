@@ -34,6 +34,7 @@ export const notesToQuizBody = z.object({
 
 export const quizSubmitBody = z.object({
   answers: z.record(z.string(), z.number()),
+  submissionId: z.string().uuid().optional(),
 });
 
 export const videoExtractBody = z.object({

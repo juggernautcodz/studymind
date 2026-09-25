@@ -11,6 +11,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useTheme } from "@/hooks/useTheme";
 import { useCourseBrain } from "@/lib/courseBrain";
+import { useCourseMastery, useRecalculateCourseMastery } from "@/lib/mastery";
+import { Button } from "@/components/Button";
 import { BorderRadius, Spacing } from "@/constants/theme";
 
 export default function CourseBrainScreen() {
@@ -19,6 +21,8 @@ export default function CourseBrainScreen() {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const { data: brain, isLoading, error, refetch } = useCourseBrain(courseId);
+  const { data: mastery = [], refetch: refetchMastery } = useCourseMastery(courseId);
+  const recalculate = useRecalculateCourseMastery(courseId);
 
   if (isLoading) return <LoadingState fullScreen message="Loading Course Brain..." />;
   if (error || !brain) {
@@ -100,6 +104,37 @@ export default function CourseBrainScreen() {
           ))
         )}
 
+        <SectionHeader title="Mastery" icon="award" />
+        <Card style={styles.card}>
+          {mastery.length === 0 ? (
+            <>
+              <ThemedText type="body" style={{ color: theme.textSecondary }}>
+                Complete a quiz or review flashcards to measure understanding by topic.
+              </ThemedText>
+              <Button onPress={() => recalculate.mutate()} disabled={recalculate.isPending} style={{ marginTop: Spacing.md }}>
+                {recalculate.isPending ? "Calculating..." : "Calculate Mastery"}
+              </Button>
+            </>
+          ) : mastery.slice().sort((a, b) => (a.score ?? -1) - (b.score ?? -1)).map((item) => (
+            <View key={item.conceptId} style={styles.masteryRow}>
+              <View style={{ flex: 1 }}>
+                <ThemedText type="body">{item.name}</ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  {item.evidenceCount
+                    ? `${item.evidenceCount} evidence events · ${Math.round(item.confidence * 100)}% confidence · ${item.trend.toLowerCase()}`
+                    : "Not yet assessed"}
+                </ThemedText>
+              </View>
+              <ThemedText type="h4" style={{ color: item.score === null ? theme.textSecondary : item.score >= 0.7 ? theme.success : theme.warning }}>
+                {item.score === null ? "—" : `${Math.round(item.score * 100)}%`}
+              </ThemedText>
+            </View>
+          ))}
+          <Button onPress={() => { recalculate.mutate(); void refetchMastery(); }} disabled={recalculate.isPending} variant="ghost" style={{ marginTop: Spacing.sm }}>
+            Refresh Mastery
+          </Button>
+        </Card>
+
         <SectionHeader title="Exam context" icon="calendar" />
         <Card style={styles.card}>
           {brain.exams.length === 0 ? (
@@ -119,7 +154,7 @@ export default function CourseBrainScreen() {
         </Card>
 
         <ThemedText type="small" style={[styles.futureNote, { color: theme.textSecondary }]}>
-          Concepts and mastery will become available in later StudyMind updates.
+          Mastery uses your quiz and flashcard practice evidence.
         </ThemedText>
       </ScrollView>
     </ThemedView>
@@ -144,5 +179,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.sm,
   },
+  masteryRow: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.sm },
   futureNote: { textAlign: "center", marginTop: Spacing.lg },
 });

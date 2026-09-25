@@ -1,6 +1,8 @@
 import { Router, Response } from "express";
+import { randomUUID } from "node:crypto";
 import prisma from "./db";
 import { authMiddleware, AuthRequest } from "./auth";
+import { recordFlashcardReview } from "./mastery-service";
 
 const router = Router();
 
@@ -10,7 +12,7 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const id = req.params.id as string;
-      const { correct } = req.body;
+      const { correct, eventId } = req.body;
 
       const flashcard = await prisma.flashcard.findFirst({
         where: {
@@ -24,55 +26,9 @@ router.post(
         return res.status(404).json({ error: "Flashcard not found" });
       }
 
-      let stat = await prisma.flashcardStat.findUnique({
-        where: {
-          userId_flashcardId: {
-            userId: req.user!.id,
-            flashcardId: id,
-          },
-        },
-      });
-
-      if (!stat) {
-        stat = await prisma.flashcardStat.create({
-          data: {
-            userId: req.user!.id,
-            flashcardId: id,
-            timesCorrect: 0,
-            timesWrong: 0,
-            easeFactor: 2.5,
-            interval: 1,
-          },
-        });
-      }
-
-      let newEaseFactor = stat.easeFactor;
-      let newInterval = stat.interval;
-
-      if (correct) {
-        newEaseFactor = Math.max(1.3, stat.easeFactor + 0.1);
-        newInterval = Math.round(stat.interval * stat.easeFactor);
-      } else {
-        newEaseFactor = Math.max(1.3, stat.easeFactor - 0.2);
-        newInterval = 1;
-      }
-
-      const nextReview = new Date();
-      nextReview.setDate(nextReview.getDate() + newInterval);
-
-      const updatedStat = await prisma.flashcardStat.update({
-        where: { id: stat.id },
-        data: {
-          timesCorrect: correct ? stat.timesCorrect + 1 : stat.timesCorrect,
-          timesWrong: correct ? stat.timesWrong : stat.timesWrong + 1,
-          lastReviewed: new Date(),
-          nextReview,
-          easeFactor: newEaseFactor,
-          interval: newInterval,
-        },
-      });
-
-      res.json({ stat: updatedStat });
+      if (typeof correct !== "boolean") return res.status(400).json({ error: "correct must be a boolean" });
+      const result = await recordFlashcardReview(req.user!.id, id, correct, typeof eventId === "string" && eventId.length > 0 ? eventId : randomUUID());
+      res.json({ stat: result.stat, duplicate: result.duplicate });
     } catch (error) {
       console.error("Answer flashcard error:", error);
       res.status(500).json({ error: "Failed to record answer" });

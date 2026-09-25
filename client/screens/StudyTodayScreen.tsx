@@ -27,6 +27,7 @@ import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type { Topic, Flashcard } from "@/types";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { v4 as uuidv4 } from "uuid";
 
 interface StudyCard {
   id: string;
@@ -100,7 +101,7 @@ export default function StudyTodayScreen() {
     flipProgress.value = withSpring(showAnswer ? 0 : 1);
   };
 
-  const recordReview = useCallback(async (flashcardId: string, correct: boolean) => {
+  const recordReview = useCallback(async (flashcardId: string, correct: boolean, eventId: string) => {
     try {
       const authHeaders = await getAuthHeaders();
       if (!authHeaders.Authorization) return;
@@ -110,7 +111,7 @@ export default function StudyTodayScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders },
           credentials: "include",
-          body: JSON.stringify({ correct }),
+          body: JSON.stringify({ correct, eventId }),
         },
       );
     } catch {
@@ -132,7 +133,7 @@ export default function StudyTodayScreen() {
       setWrongCount((c) => c + 1);
     }
 
-    recordReview(currentCard.id, correct);
+    recordReview(currentCard.id, correct, uuidv4());
 
     if (currentIndex < allCards.length - 1) {
       setCurrentIndex((i) => i + 1);

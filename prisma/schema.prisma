@@ -32,6 +32,9 @@ model User {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   courses            Course[]
+  concepts           Concept[]
+  conceptMasteries   ConceptMastery[]
+  masteryEvents      MasteryEvent[]
   entitlement        Entitlement?
   exams              Exam[]
   flashcardStats     FlashcardStat[]
@@ -123,6 +126,9 @@ model Course {
   mindmapNodes   MindmapNode[]
   sources        Source[]
   generationRuns GenerationRun[]
+  concepts       Concept[]
+  masteries      ConceptMastery[]
+  masteryEvents  MasteryEvent[]
   topics         Topic[]
 
   @@index([userId])
@@ -148,6 +154,7 @@ model Topic {
   course           Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
   user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   whiteboardImages WhiteboardImage[]
+  concepts         Concept[]
 
   @@index([userId])
   @@index([courseId])
@@ -202,6 +209,70 @@ model FlashcardStat {
   @@index([userId])
 }
 
+model Concept {
+  id        String           @id @default(uuid())
+  userId    String
+  courseId  String
+  topicId   String
+  name      String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  course    Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic     Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  masteries ConceptMastery[]
+  events    MasteryEvent[]
+
+  @@unique([courseId, topicId])
+  @@index([userId])
+  @@index([courseId])
+  @@index([topicId])
+}
+
+model ConceptMastery {
+  id             String   @id @default(uuid())
+  userId         String
+  courseId       String
+  conceptId      String
+  score          Float    @default(0)
+  confidence     Float    @default(0)
+  evidenceCount  Int      @default(0)
+  correctCount   Int      @default(0)
+  incorrectCount Int      @default(0)
+  lastPracticedAt DateTime?
+  trend          String   @default("UNKNOWN")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  concept        Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conceptId])
+  @@index([userId, courseId])
+  @@index([conceptId])
+}
+
+model MasteryEvent {
+  id             String   @id @default(uuid())
+  eventKey       String   @unique
+  userId         String
+  courseId       String
+  conceptId      String
+  kind           String
+  sourceId       String?
+  correctCount   Int      @default(0)
+  incorrectCount Int      @default(0)
+  occurredAt     DateTime @default(now())
+  metadata       String?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  concept        Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([userId, courseId, conceptId, occurredAt])
+  @@index([conceptId])
+}
+
 model Quiz {
   id        String         @id @default(uuid())
   topicId   String
@@ -232,6 +303,7 @@ model QuizAttempt {
   id             String   @id @default(uuid())
   userId         String
   quizId         String
+  submissionId   String?
   score          Int
   totalQuestions Int
   answers        String
@@ -241,6 +313,7 @@ model QuizAttempt {
 
   @@index([userId])
   @@index([quizId])
+  @@unique([userId, quizId, submissionId])
 }
 
 model WhiteboardImage {
