@@ -79,6 +79,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   try {
+    const studyTodayRoutes = (await import("./study-today")).default;
+    safeMount(app, "/api", studyTodayRoutes, "Study Today");
+  } catch (err) {
+    console.warn("Failed to load Study Today routes:", err);
+  }
+
+  try {
     const examRoutes = (await import("./exam")).default;
     safeMount(app, "/api/exams", examRoutes, "exams");
   } catch (err) {

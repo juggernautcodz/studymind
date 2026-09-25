@@ -26,6 +26,7 @@
     "ios": "expo run:ios",
     "audit": "node scripts/audit.cjs",
     "audit:fast": "AUDIT_SKIP_BUILD=1 node scripts/audit.cjs",
+    "test:study-today": "tsx --test server/study-today.test.ts",
     "test:exam-readiness": "tsx --test server/exam-readiness.test.ts",
     "test:exam-readiness-client": "tsx --test client/lib/examReadinessPresentation.test.ts",
     "mobile:recover": "bash scripts/mobile-recover.sh",
