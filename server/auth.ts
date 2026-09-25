@@ -411,7 +411,18 @@ router.get(
     try {
       const userId = req.user!.id;
 
-      const [user, semesters, courses, topics, flashcards, quizAttempts, purchases, entitlement] =
+      const [
+        user,
+        semesters,
+        courses,
+        topics,
+        flashcards,
+        quizAttempts,
+        purchases,
+        entitlement,
+        sources,
+        generationRuns,
+      ] =
         await Promise.all([
           prisma.user.findUnique({
             where: { id: userId },
@@ -439,6 +450,26 @@ router.get(
             where: { userId },
             select: { plan: true, expiresAt: true, source: true },
           }),
+          // Follow-up: stream/page SourceLock data if revision volume makes the
+          // complete privacy export too large to safely hold in memory.
+          prisma.source.findMany({
+            where: { course: { userId } },
+            include: {
+              revisions: {
+                orderBy: { revision: "asc" },
+                include: {
+                  segments: {
+                    orderBy: { position: "asc" },
+                    include: { citations: true },
+                  },
+                },
+              },
+            },
+          }),
+          prisma.generationRun.findMany({
+            where: { course: { userId } },
+            orderBy: { createdAt: "asc" },
+          }),
         ]);
 
       res.setHeader("Content-Disposition", `attachment; filename="studymind-export-${userId}.json"`);
@@ -452,6 +483,8 @@ router.get(
         flashcards,
         quizAttempts,
         purchases,
+        sources,
+        generationRuns,
       });
     } catch (error) {
       console.error("Data export error:", error);

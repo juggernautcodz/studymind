@@ -46,6 +46,7 @@ export interface CourseBrainDto {
     quizzes: number;
     quizAttempts: number;
     mindMapNodes: number;
+    sources: number;
   };
   quizPerformance: {
     score: number;
@@ -55,7 +56,7 @@ export interface CourseBrainDto {
   exams: CourseBrainExamDto[];
   lastActivityAt: string | null;
   futureDomains: {
-    sources: { available: false };
+    sources: { available: true; count: number };
     concepts: { available: false };
     mastery: { available: false };
   };
@@ -111,7 +112,7 @@ export async function getCourseBrain(
   if (!course) return null;
 
   const topicIds = course.topics.map((topic) => topic.id);
-  const [semester, recordings, flashcards, quizzes, mindMapSummary, exams] =
+  const [semester, recordings, flashcards, quizzes, mindMapSummary, exams, sourceSummary] =
     await Promise.all([
       prisma.semester.findFirst({
         where: { id: course.semesterId, userId },
@@ -156,6 +157,11 @@ export async function getCourseBrain(
         where: { userId },
         select: { id: true, name: true, examDate: true, updatedAt: true, topicIds: true },
         orderBy: { examDate: "asc" },
+      }),
+      prisma.source.aggregate({
+        where: { courseId, course: { userId } },
+        _count: { _all: true },
+        _max: { updatedAt: true },
       }),
     ]);
 
@@ -223,6 +229,7 @@ export async function getCourseBrain(
     ...flashcards.map((row) => row._max.createdAt),
     ...quizActivity,
     mindMapSummary._max.updatedAt,
+    sourceSummary._max.updatedAt,
     ...courseExams.map((exam) => new Date(exam.updatedAt)),
   ]);
 
@@ -255,6 +262,7 @@ export async function getCourseBrain(
       quizzes: topicDtos.reduce((total, topic) => total + topic.counts.quizzes, 0),
       quizAttempts: totalQuizAttempts,
       mindMapNodes: mindMapSummary._count._all,
+      sources: sourceSummary._count._all,
     },
     quizPerformance: {
       score,
@@ -264,7 +272,7 @@ export async function getCourseBrain(
     exams: courseExams,
     lastActivityAt,
     futureDomains: {
-      sources: { available: false },
+      sources: { available: true, count: sourceSummary._count._all },
       concepts: { available: false },
       mastery: { available: false },
     },

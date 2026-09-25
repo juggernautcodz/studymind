@@ -37,6 +37,7 @@ export interface CourseBrain {
     quizzes: number;
     quizAttempts: number;
     mindMapNodes: number;
+    sources: number;
   };
   quizPerformance: {
     score: number;
@@ -51,7 +52,7 @@ export interface CourseBrain {
   }>;
   lastActivityAt: string | null;
   futureDomains: {
-    sources: { available: false };
+    sources: { available: true; count: number };
     concepts: { available: false };
     mastery: { available: false };
   };

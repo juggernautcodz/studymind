@@ -40,6 +40,7 @@ export default function CourseBrainScreen() {
     ["Quizzes", brain.totals.quizzes],
     ["Quiz attempts", brain.totals.quizAttempts],
     ["Mind map items", brain.totals.mindMapNodes],
+    ["Sources", brain.totals.sources],
   ] as const;
 
   return (
@@ -118,7 +119,7 @@ export default function CourseBrainScreen() {
         </Card>
 
         <ThemedText type="small" style={[styles.futureNote, { color: theme.textSecondary }]}>
-          Sources, concepts, and mastery will become available in later StudyMind updates.
+          Concepts and mastery will become available in later StudyMind updates.
         </ThemedText>
       </ScrollView>
     </ThemedView>

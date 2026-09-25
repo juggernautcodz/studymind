@@ -6,6 +6,23 @@ datasource db {
   provider = "postgresql"
 }
 
+enum SourceKind {
+  LECTURE_AUDIO
+  LECTURE_TRANSCRIPT
+  DOCUMENT
+  PDF
+  WHITEBOARD_IMAGE
+  MANUAL_TEXT
+  VIDEO
+  URL
+}
+
+enum ArtifactKind {
+  FLASHCARD
+  QUIZ_QUESTION
+  TOPIC_NOTES
+}
+
 model User {
   id                 String              @id @default(uuid())
   email              String              @unique
@@ -94,38 +111,42 @@ model Semester {
 }
 
 model Course {
-  id           String        @id @default(uuid())
-  userId       String
-  semesterId   String
-  name         String
-  color        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  semester     Semester      @relation(fields: [semesterId], references: [id], onDelete: Cascade)
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mindmapNodes MindmapNode[]
-  topics       Topic[]
+  id             String          @id @default(uuid())
+  userId         String
+  semesterId     String
+  name           String
+  color          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  semester       Semester        @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mindmapNodes   MindmapNode[]
+  sources        Source[]
+  generationRuns GenerationRun[]
+  topics         Topic[]
 
   @@index([userId])
   @@index([semesterId])
 }
 
 model Topic {
-  id               String            @id @default(uuid())
+  id               String             @id @default(uuid())
   userId           String
   courseId         String
   name             String
-  orderIndex       Int               @default(0)
+  orderIndex       Int                @default(0)
   transcript       String?
   notes            String?
-  status           String            @default("pending")
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  status           String             @default("pending")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
   flashcards       Flashcard[]
   quizzes          Quiz[]
   recordings       Recording[]
-  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources          Source[]
+  noteCitations    ArtifactCitation[] @relation("TopicNoteCitations")
+  course           Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   whiteboardImages WhiteboardImage[]
 
   @@index([userId])
@@ -141,6 +162,7 @@ model Recording {
   durationSeconds  Float?
   transcriptStatus String   @default("pending")
   transcript       String?
+  source           Source?
   createdAt        DateTime @default(now())
   topic            Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -150,14 +172,15 @@ model Recording {
 }
 
 model Flashcard {
-  id         String          @id @default(uuid())
+  id         String             @id @default(uuid())
   topicId    String
   front      String
   back       String
-  orderIndex Int             @default(0)
-  createdAt  DateTime        @default(now())
-  topic      Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  orderIndex Int                @default(0)
+  createdAt  DateTime           @default(now())
+  topic      Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
   stats      FlashcardStat[]
+  citations  ArtifactCitation[]
 
   @@index([topicId])
 }
@@ -192,14 +215,15 @@ model Quiz {
 }
 
 model QuizQuestion {
-  id            String  @id @default(uuid())
+  id            String             @id @default(uuid())
   quizId        String
   question      String
   options       String
   correctAnswer Int
   explanation   String?
-  orderIndex    Int     @default(0)
-  quiz          Quiz    @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  orderIndex    Int                @default(0)
+  quiz          Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  citations     ArtifactCitation[]
 
   @@index([quizId])
 }
@@ -226,6 +250,7 @@ model WhiteboardImage {
   filepath  String
   ocrText   String?
   createdAt DateTime @default(now())
+  source    Source?
   topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@index([topicId])
@@ -263,6 +288,106 @@ model Exam {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Source {
+  id                String           @id @default(uuid())
+  courseId          String
+  topicId           String?
+  recordingId       String?          @unique
+  whiteboardImageId String?          @unique
+  kind              SourceKind
+  title             String
+  originUri         String?
+  mimeType          String?
+  currentRevision   Int              @default(1)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  course            Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic             Topic?           @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  recording         Recording?       @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+  whiteboardImage   WhiteboardImage? @relation(fields: [whiteboardImageId], references: [id], onDelete: SetNull)
+  revisions         SourceRevision[]
+
+  @@index([courseId])
+  @@index([topicId])
+  @@index([courseId, kind])
+}
+
+model SourceRevision {
+  id              String          @id @default(uuid())
+  sourceId        String
+  generationRunId String?
+  revision        Int
+  contentHash     String
+  contentLength   Int
+  createdAt       DateTime        @default(now())
+  source          Source          @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  generationRun   GenerationRun?  @relation(fields: [generationRunId], references: [id], onDelete: SetNull)
+  segments        SourceSegment[]
+
+  @@unique([sourceId, revision])
+  @@index([generationRunId])
+}
+
+model SourceSegment {
+  id           String             @id @default(uuid())
+  revisionId   String
+  position     Int
+  content      String
+  locatorLabel String?
+  pageNumber   Int?
+  startSeconds Float?
+  endSeconds   Float?
+  charStart    Int?
+  charEnd      Int?
+  regionX      Float?
+  regionY      Float?
+  regionWidth  Float?
+  regionHeight Float?
+  createdAt    DateTime           @default(now())
+  revision     SourceRevision     @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  citations    ArtifactCitation[]
+
+  @@unique([revisionId, position])
+  @@index([revisionId])
+}
+
+model GenerationRun {
+  id        String             @id @default(uuid())
+  courseId  String
+  operation String
+  provider  String?
+  model     String?
+  createdAt DateTime           @default(now())
+  course    Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  revisions SourceRevision[]
+  citations ArtifactCitation[]
+
+  @@index([courseId])
+}
+
+model ArtifactCitation {
+  id              String         @id @default(uuid())
+  sourceSegmentId String
+  generationRunId String?
+  artifactKind    ArtifactKind
+  flashcardId     String?
+  quizQuestionId  String?
+  topicId         String?
+  evidenceExcerpt String?        @db.VarChar(500)
+  createdAt       DateTime       @default(now())
+  sourceSegment   SourceSegment  @relation(fields: [sourceSegmentId], references: [id], onDelete: Cascade)
+  generationRun   GenerationRun? @relation(fields: [generationRunId], references: [id], onDelete: SetNull)
+  flashcard       Flashcard?     @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  quizQuestion    QuizQuestion?  @relation(fields: [quizQuestionId], references: [id], onDelete: Cascade)
+  topic           Topic?         @relation("TopicNoteCitations", fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([sourceSegmentId])
+  @@index([generationRunId])
+  @@index([flashcardId])
+  @@index([quizQuestionId])
+  @@index([topicId])
 }
 
 model Job {

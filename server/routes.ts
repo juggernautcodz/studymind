@@ -31,6 +31,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   try {
+    const sourceLockRoutes = (await import("./source-lock")).default;
+    safeMount(app, "/api", sourceLockRoutes, "SourceLock");
+  } catch (err) {
+    console.warn("Failed to load SourceLock routes:", err);
+  }
+
+  try {
     const authRoutes = (await import("./auth")).default;
     safeMount(app, "/api/auth", authRoutes, "auth");
   } catch (err) {
