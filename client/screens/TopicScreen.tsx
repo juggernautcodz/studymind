@@ -26,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { LoadingState } from "@/components/LoadingState";
+import { ErrorState } from "@/components/ErrorState";
 import { TabBar } from "@/components/TabBar";
 import { BottomSheet } from "@/components/BottomSheet";
 import {
@@ -41,7 +42,10 @@ import { getApiUrl, getAuthHeaders, isNetworkError } from "@/lib/query-client";
 import {
   completeDurableFlashcardReview,
   completeDurableQuizSubmission,
+  hydrateStudyTopic,
   studyEvidenceQueryKeys,
+  type StudyTopicDestination,
+  type StudyTopicHydrationError,
 } from "@/lib/studyEvidence";
 import {
   fetchStudyTopicEvidence,
@@ -92,6 +96,8 @@ export default function TopicScreen() {
     questions: QuizQuestion[];
   } | null>(null);
   const [studyEvidenceReady, setStudyEvidenceReady] = useState(false);
+  const [hydrationError, setHydrationError] =
+    useState<StudyTopicHydrationError | null>(null);
   const [showPasteSheet, setShowPasteSheet] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [showDestinationSheet, setShowDestinationSheet] = useState(false);
@@ -102,6 +108,7 @@ export default function TopicScreen() {
   } | null>(null);
 
   const loadData = useCallback(async () => {
+    if (studyTodayAction) setIsLoading(true);
     try {
       const [loadedTopic, notes, flashcards, quizData] =
         await Promise.all([
@@ -115,31 +122,54 @@ export default function TopicScreen() {
       setTopicFlashcards(flashcards);
       setTopicQuizData(quizData);
       setStudyEvidenceReady(false);
+      setHydrationError(null);
 
       if (studyTodayAction) {
         try {
-          const evidence = await fetchStudyTopicEvidence(topicId);
-          if (
-            studyTodayAction === "REVIEW_FLASHCARDS" &&
-            evidence.flashcards.length === 0
-          ) {
-            throw new Error("No server-backed flashcards are available");
+          const destination = (initialTab ?? "notes") as StudyTopicDestination;
+          const hydration = await hydrateStudyTopic({
+            destination,
+            cached: {
+              topic: loadedTopic,
+              notes,
+              flashcards,
+              quizData,
+            },
+            fetchServer: () => fetchStudyTopicEvidence(topicId),
+            cacheServer: (content) =>
+              storage.cacheHydratedTopicIfMissing(content),
+          });
+          setTopic(hydration.content.topic);
+          setTopicNotes(hydration.content.notes);
+          setTopicFlashcards(hydration.content.flashcards);
+          setTopicQuizData(hydration.content.quizData);
+          setStudyEvidenceReady(hydration.source === "SERVER");
+
+          if (hydration.warning) {
+            showToast({
+              type: "warning",
+              title:
+                hydration.source === "CACHE"
+                  ? "Showing saved content"
+                  : "Content loaded",
+              message:
+                hydration.source === "CACHE"
+                  ? "The server is unavailable, so this topic is using your saved device copy."
+                  : "The latest content loaded, but it could not be saved for offline use.",
+            });
           }
-          if (
-            studyTodayAction === "TAKE_QUIZ" &&
-            (!evidence.quizData || evidence.quizData.questions.length === 0)
-          ) {
-            throw new Error("No server-backed quiz is available");
-          }
-          setTopicFlashcards(evidence.flashcards);
-          setTopicQuizData(evidence.quizData);
-          setStudyEvidenceReady(true);
-        } catch {
+        } catch (error) {
+          const hydrationFailure = error as StudyTopicHydrationError;
+          setHydrationError(hydrationFailure);
           showToast({
             type: "error",
             title: "Study activity unavailable",
             message:
-              "We couldn't load the server-backed activity. Your local study material is unchanged.",
+              hydrationFailure.kind === "UNAUTHORIZED"
+                ? "Sign in again to load this topic."
+                : hydrationFailure.kind === "NOT_FOUND"
+                  ? "This topic is no longer available."
+                  : "We couldn't load this topic. Check your connection and try again.",
           });
         }
       }
@@ -147,7 +177,7 @@ export default function TopicScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [topicId, courseId, showToast, studyTodayAction]);
+  }, [topicId, courseId, initialTab, showToast, studyTodayAction]);
 
   const refreshDurableEvidence = useCallback(async () => {
     await Promise.allSettled(
@@ -668,6 +698,34 @@ export default function TopicScreen() {
     return <LoadingState fullScreen message="Loading topic..." />;
   }
 
+  if (hydrationError) {
+    const copy =
+      hydrationError.kind === "UNAUTHORIZED"
+        ? {
+            title: "Sign in required",
+            message: "Sign in again to load this server-backed topic.",
+          }
+        : hydrationError.kind === "NOT_FOUND"
+          ? {
+              title: "Topic unavailable",
+              message: "This topic could not be found for your account.",
+            }
+          : {
+              title: "Couldn't load topic",
+              message:
+                "No saved content is available for this tab. Check your connection and retry.",
+            };
+    return (
+      <View style={styles.hydrationError}>
+        <ErrorState
+          title={copy.title}
+          message={copy.message}
+          onRetry={() => void loadData()}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
@@ -783,6 +841,10 @@ export default function TopicScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  hydrationError: {
+    flex: 1,
+    justifyContent: "center",
   },
   quickActionsSection: {
     marginBottom: Spacing.md,

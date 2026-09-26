@@ -31,7 +31,8 @@ router.get("/export", authMiddleware, async (req: AuthRequest, res: Response) =>
 
 /**
  * GET /api/sync/topic/:id
- * Returns a single topic with all flashcards, quizzes, recordings.
+ * Returns a single owned topic with notes/source content, flashcards,
+ * quizzes, and recordings for authenticated hydration.
  * Used for lazy-loading on the PC topic viewer.
  */
 router.get("/topic/:id", authMiddleware, async (req: AuthRequest, res: Response) => {

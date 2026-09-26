@@ -105,11 +105,7 @@ export function getStudyTodayViewState({
 export function getStudyTodayActionDestination(
   recommendation: StudyTodayRecommendation,
 ) {
-  const studyTodayAction =
-    recommendation.suggestedAction.code === "REVIEW_FLASHCARDS" ||
-    recommendation.suggestedAction.code === "TAKE_QUIZ"
-      ? recommendation.suggestedAction.code
-      : undefined;
+  const studyTodayAction = recommendation.suggestedAction.code;
   const initialTab: TopicTab =
     recommendation.suggestedAction.code === "REVIEW_FLASHCARDS"
       ? "flashcards"
@@ -122,7 +118,7 @@ export function getStudyTodayActionDestination(
       topicId: recommendation.suggestedAction.topicId,
       courseId: recommendation.course.id,
       initialTab,
-      ...(studyTodayAction ? { studyTodayAction } : {}),
+      studyTodayAction,
     },
   };
 }

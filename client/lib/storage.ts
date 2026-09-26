@@ -17,6 +17,11 @@ import type {
   MindmapNode,
   UsageStats,
 } from "@/types";
+import {
+  mergeHydratedTopicCache,
+  type StudyTopicEvidence,
+} from "@/lib/studyEvidence";
+import { scopedStorageKey } from "@/lib/storageNamespace";
 
 const KEYS = {
   USER: "studymind_user",
@@ -37,6 +42,7 @@ const KEYS = {
   EXAM_ATTEMPTS: "studymind_exam_attempts",
   RECENT_TOPICS: "studymind_recent_topics",
 };
+const GLOBAL_KEYS = new Set([KEYS.USER, KEYS.AUTH_TOKEN]);
 
 // USER/AUTH_TOKEN describe "who's currently signed in on this device" and
 // stay global. Every other key holds actual study content and must be
@@ -49,8 +55,7 @@ export function setActiveUser(userId: string | null): void {
 }
 
 function scopeKey(key: string): string {
-  if (key === KEYS.USER || key === KEYS.AUTH_TOKEN) return key;
-  return currentUserId ? `${currentUserId}:${key}` : key;
+  return scopedStorageKey(key, currentUserId, GLOBAL_KEYS);
 }
 
 async function getItems<T>(key: string): Promise<T[]> {
@@ -121,6 +126,29 @@ export const storage = {
     await setItems(KEYS.SEMESTERS, data.semesters);
     await setItems(KEYS.COURSES, data.courses);
     await setItems(KEYS.TOPICS, data.topics);
+  },
+
+  async cacheHydratedTopicIfMissing(
+    hydration: StudyTopicEvidence,
+  ): Promise<void> {
+    const [topics, notes, flashcards, quizzes, questions] = await Promise.all([
+      getItems<Topic>(KEYS.TOPICS),
+      getItems<Notes>(KEYS.NOTES),
+      getItems<Flashcard>(KEYS.FLASHCARDS),
+      getItems<Quiz>(KEYS.QUIZZES),
+      getItems<QuizQuestion>(KEYS.QUIZ_QUESTIONS),
+    ]);
+    const merged = mergeHydratedTopicCache(
+      { topics, notes, flashcards, quizzes, questions },
+      hydration,
+    );
+    await Promise.all([
+      setItems(KEYS.TOPICS, merged.topics),
+      setItems(KEYS.NOTES, merged.notes),
+      setItems(KEYS.FLASHCARDS, merged.flashcards),
+      setItems(KEYS.QUIZZES, merged.quizzes),
+      setItems(KEYS.QUIZ_QUESTIONS, merged.questions),
+    ]);
   },
 
   async createSemester(

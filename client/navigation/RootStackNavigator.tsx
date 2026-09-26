@@ -35,7 +35,7 @@ export type RootStackParamList = {
     topicId: string;
     courseId: string;
     initialTab?: "notes" | "flashcards" | "quiz";
-    studyTodayAction?: "REVIEW_FLASHCARDS" | "TAKE_QUIZ";
+    studyTodayAction?: "REVIEW_FLASHCARDS" | "TAKE_QUIZ" | "REVIEW_CONCEPT";
   };
   Record: { topicId: string };
   Mindmap: { courseId: string };

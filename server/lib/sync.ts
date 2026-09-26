@@ -105,7 +105,7 @@ export async function exportUserData(userId: string, since?: Date) {
  */
 export async function exportTopic(topicId: string, userId: string) {
   const topic = await prisma.topic.findFirst({
-    where: { id: topicId, userId },
+    where: { id: topicId, userId, course: { userId } },
     include: {
       flashcards: {
         include: { stats: { where: { userId } } },
@@ -124,6 +124,33 @@ export async function exportTopic(topicId: string, userId: string) {
         },
       },
       whiteboardImages: true,
+      sources: {
+        where: { course: { userId } },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          kind: true,
+          currentRevision: true,
+          updatedAt: true,
+          revisions: {
+            orderBy: { revision: "desc" },
+            take: 1,
+            select: {
+              revision: true,
+              segments: {
+                orderBy: { position: "asc" },
+                select: {
+                  id: true,
+                  position: true,
+                  content: true,
+                  locatorLabel: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 
