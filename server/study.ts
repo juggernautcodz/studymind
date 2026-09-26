@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import prisma from "./db";
 import { guestOrAuthMiddleware, AuthRequest } from "./auth";
 import { ANONYMOUS_USER_ID } from "./constants";
+import { ensureAnonymousUserExists } from "./guest-provisioning";
 import { notFound } from "./lib/errors";
 
 const router = Router();
@@ -15,77 +16,12 @@ function getUserId(req: AuthRequest) {
 }
 
 /* ------------------------------------------------ */
-/* ANONYMOUS USER SEED                              */
-/* ------------------------------------------------ */
-
-export async function ensureAnonymousUserExists() {
-  try {
-    let existingUser = await prisma.user.findUnique({
-      where: { id: ANONYMOUS_USER_ID },
-    });
-
-    if (!existingUser) {
-      await prisma.user.create({
-        data: {
-          id: ANONYMOUS_USER_ID,
-          email: "guest@studymind.local",
-          passwordHash: "guest-no-login",
-          name: "Guest User",
-        },
-      });
-
-      const semester = await prisma.semester.create({
-        data: {
-          userId: ANONYMOUS_USER_ID,
-          name: "My Semester",
-        },
-      });
-
-      const course = await prisma.course.create({
-        data: {
-          userId: ANONYMOUS_USER_ID,
-          semesterId: semester.id,
-          name: "My Course",
-        },
-      });
-
-      const topic = await prisma.topic.create({
-        data: {
-          userId: ANONYMOUS_USER_ID,
-          courseId: course.id,
-          name: "Introduction to Photosynthesis",
-          orderIndex: 0,
-          transcript:
-            "Today we'll explore photosynthesis, the process by which plants convert sunlight into energy.",
-          notes: "# Photosynthesis Overview",
-          status: "completed",
-        },
-      });
-
-      await prisma.flashcard.createMany({
-        data: [
-          {
-            topicId: topic.id,
-            front: "What is photosynthesis?",
-            back: "Plants converting sunlight into energy.",
-            orderIndex: 0,
-          },
-        ],
-      });
-
-      console.log("Created anonymous guest demo content");
-    }
-  } catch (error) {
-    console.error("Failed to create anonymous user:", error);
-  }
-}
-
-/* ------------------------------------------------ */
 /* DEMO DATA ROUTES                                 */
 /* ------------------------------------------------ */
 
 router.get("/guest/demo-data", async (_req, res: Response) => {
   try {
+    await ensureAnonymousUserExists();
     const topic = await prisma.topic.findFirst({
       where: { userId: ANONYMOUS_USER_ID },
       include: {

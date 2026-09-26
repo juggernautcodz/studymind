@@ -14,10 +14,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log("Registering routes...");
 
   try {
-    const { ensureAnonymousUserExists, default: studyRoutes } = await import(
-      "./study"
-    );
-    await ensureAnonymousUserExists();
+    const studyRoutes = (await import("./study")).default;
     safeMount(app, "/api", studyRoutes, "study");
   } catch (err) {
     console.warn("Failed to load study routes:", err);

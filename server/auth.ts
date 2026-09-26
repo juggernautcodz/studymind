@@ -110,6 +110,28 @@ export const optionalAuthMiddleware = async (
 };
 
 import { ANONYMOUS_USER_ID } from "./constants";
+import { ensureAnonymousUserExists } from "./guest-provisioning";
+
+async function continueAsGuest(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    await ensureAnonymousUserExists();
+    req.user = {
+      id: ANONYMOUS_USER_ID,
+      email: "guest@studymind.app",
+    };
+    return next();
+  } catch (error) {
+    console.error("Guest provisioning failed:", error);
+    return res.status(503).json({
+      error: "Guest mode is temporarily unavailable",
+      code: "GUEST_UNAVAILABLE",
+    });
+  }
+}
 
 export const guestOrAuthMiddleware = async (
   req: AuthRequest,
@@ -118,14 +140,8 @@ export const guestOrAuthMiddleware = async (
 ) => {
   const authHeader = req.headers.authorization;
 
-  const guestUser = {
-    id: ANONYMOUS_USER_ID,
-    email: "guest@studymind.app",
-  };
-
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    req.user = guestUser;
-    return next();
+    return continueAsGuest(req, res, next);
   }
 
   const token = authHeader.substring(7);
@@ -136,8 +152,7 @@ export const guestOrAuthMiddleware = async (
     token.startsWith("guest_token_") ||
     token.startsWith("guest-token")
   ) {
-    req.user = guestUser;
-    return next();
+    return continueAsGuest(req, res, next);
   }
 
   try {
@@ -148,19 +163,14 @@ export const guestOrAuthMiddleware = async (
     });
 
     if (!user) {
-      req.user = guestUser;
-      return next();
+      return continueAsGuest(req, res, next);
     }
 
     req.user = user;
     next();
   } catch (error) {
     // Token invalid, fall back to guest
-    req.user = {
-      id: ANONYMOUS_USER_ID,
-      email: "guest@studymind.app",
-    };
-    next();
+    return continueAsGuest(req, res, next);
   }
 };
 

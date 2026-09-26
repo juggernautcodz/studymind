@@ -31,6 +31,7 @@
     "test:exam-readiness": "tsx --test server/exam-readiness.test.ts",
     "test:exam-readiness-client": "tsx --test client/lib/examReadinessPresentation.test.ts",
     "test:account-deletion": "tsx --test server/auth-account-deletion.test.ts client/lib/accountDeletion.test.ts",
+    "test:guest-startup": "tsx --test server/guest-startup.test.ts",
     "test:study-evidence": "tsx --test server/quiz-submission-service.test.ts client/lib/studyEvidence.test.ts",
     "test:topic-hydration": "tsx --test server/topic-hydration.test.ts client/lib/studyEvidence.test.ts",
     "mobile:recover": "bash scripts/mobile-recover.sh",
