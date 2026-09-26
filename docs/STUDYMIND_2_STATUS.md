@@ -4,7 +4,7 @@ Branch: `studymind-2.0`
 
 Starting HEAD for Phase 8: `73cdaec56fd60266dc44adb58610ac19db58cee4`
 
-Current phase: Phase 8 — full regression audit performed; all HIGH findings and the startup-mutation MEDIUM finding are remediated, but the final unresolved MEDIUM finding makes Phase 9 phone testing **NOT READY**
+Current phase: Phase 8 — full regression audit and remediation are technically complete; Phase 9 phone testing is **READY TO BEGIN** but has not started
 
 ## Completed phases
 
@@ -18,7 +18,7 @@ Current phase: Phase 8 — full regression audit performed; all HIGH findings an
 
 ## Phase 8 full regression audit
 
-Audit result: **NOT READY for Phase 9 phone testing**.
+Audit result: **READY TO BEGIN Phase 9 phone testing**.
 
 Confirmed safe areas:
 
@@ -35,10 +35,11 @@ Remediated findings:
 - **HIGH — Study Today actions did not complete durable study work.** Phase 8B marks Study Today navigation explicitly and hydrates only the selected owned topic activity from the authenticated server topic export so flashcard, quiz, and question IDs remain canonical. The Cards action now exposes correct/incorrect review controls after the answer is revealed and posts a stable event ID through the existing authenticated adaptive flashcard endpoint. The existing `recordFlashcardReview` transaction remains the authority for idempotency, due-date/ease/interval updates, `FlashcardStat`, Mastery events, and concept-mastery recomputation. A failed request stays on the card and is shown as unsaved. The Quiz action now submits canonical question-ID answers with a stable `submissionId` through the existing durable quiz-attempt path, displays the server score only after success, preserves answers for retry on failure, and invalidates Study Today, course Mastery, and Exam Readiness queries. The quiz submission route now requires `authMiddleware`, scopes quiz lookup through the authenticated user's topic and course, retains the existing upsert idempotency/conflict behavior, and runs the existing Phase 5 Mastery backfill. Optional callbacks preserve the existing passive Cards and local Quiz behavior for ordinary non-Study-Today Topic entry.
 - **HIGH — server-backed Study Today topics could open empty device-local tabs.** Phase 8C extends the existing authenticated topic export with owned source-revision segments and scopes both the topic and its course to the authenticated user. Every Study Today action now hydrates the selected Notes, Cards, or Quiz destination from canonical server data before rendering, including Prisma `front`/`back` flashcards and source-backed notes. Successful hydration fills only missing user-namespaced cache categories, so existing local or pending Notes, Cards, and Quiz edits are not overwritten. A network/service failure may use an existing destination-specific cache with a warning; authentication and ownership failures never fall back to cache. A fresh-device cache miss now shows a retryable loading/error state instead of an empty success state. Ordinary non-Study-Today Topic entry remains unchanged.
 - **MEDIUM — ordinary server startup provisioned the shared guest user and demo hierarchy.** Phase 8D removes `ensureAnonymousUserExists()` from route registration, so importing modules, registering routes, building, and starting the server do not create database records. Guest provisioning is now lazy and occurs only when an explicit guest path is used: the demo-data endpoint or existing `guestOrAuthMiddleware` resolution for missing, legacy guest, invalid, or unresolved credentials. Valid authenticated requests bypass provisioning. The existing fixed guest ID remains the authority; provisioning now uses one atomic transaction, an in-process in-flight guard, and unique-conflict recovery so concurrent requests cannot create duplicate guest identities or partial demo hierarchies. Strict `authMiddleware` remains on account/data deletion, so guest credentials still receive `401` there.
+- **MEDIUM — the unapplied Exam Readiness migration could abort on unusable legacy `Exam.topicIds` text.** Phase 8E adds a migration-local exception-safe parser that converts null, blank, malformed, and valid non-array JSON to an empty array. Every legacy backfill expands only valid JSON arrays, accepts only non-empty JSON string elements, and then retains the original owned Topic/Course/Concept joins. Objects, nested arrays, numbers, booleans, JSON nulls, empty strings, and unmatched topic IDs therefore produce no scope rows; valid owned topic-ID arrays retain the intended single-course, Concept, and ExamConcept backfill. Exams with unusable legacy scope remain intact. The uniquely named helper is dropped before the migration completes.
 
-Remaining unresolved findings:
+Remaining unresolved Blocker/High/Medium findings:
 
-- **MEDIUM — Exam Readiness migration assumes every legacy `Exam.topicIds` value is a valid JSON array.** Three unguarded `::jsonb`/`jsonb_array_elements_text` expressions can abort the migration on malformed or non-array legacy data. The migration should add a reviewed preflight/guard before deployment; it was not changed or applied during this audit.
+- None. Phase 8 is technically complete. Phase 9 phone testing is ready to begin after the normal human approval gate.
 
 Validation performed:
 
@@ -48,6 +49,7 @@ Validation performed:
 - `npm run test:study-today-client` — 5 passed
 - `npm run test:exam-readiness` — 10 passed
 - `npm run test:exam-readiness-client` — 7 passed
+- `npm run test:exam-readiness-migration` — 6 passed without connecting to a database; covers valid and empty arrays, null/blank/malformed text, every valid non-array JSON type, mixed unusable array elements, guarded parsing in all three backfills, retained ownership/single-course constraints, and helper cleanup
 - `npm run test:account-deletion` — 8 passed; the server route harness uses mocked Prisma methods and cannot contact a database
 - `npm run test:guest-startup` — 6 passed without connecting to a database; covers read-only module import and route registration, explicit demo-data provisioning, concurrent/repeated idempotency, legacy guest-token compatibility, and authenticated-request bypass
 - `npm run test:study-evidence` — 18 passed; covers canonical IDs, durable flashcard success/failure ordering, authenticated owned-quiz service behavior, server scoring, Mastery update dispatch, stable-submission idempotency/conflict handling, client failure propagation, relevant cache refresh keys, and the Phase 8C client hydration/reconciliation cases
@@ -57,6 +59,7 @@ Validation performed:
 - Focused Prettier check for the new Phase 8B evidence helpers and tests — passed; the touched legacy Topic, Cards, Quiz, and AI-provider files retain their pre-existing whole-file formatting deviations rather than receiving an unrelated reformat
 - Focused Prettier check for the new Phase 8C hydration, cache-namespace, navigation, and test files — passed; touched legacy storage, Topic, and sync files retain their pre-existing whole-file formatting deviations rather than receiving an unrelated reformat
 - Focused Prettier check for the new Phase 8D guest-provisioning helper, regression test, package script, and audit documentation — passed; touched legacy auth, study, and route-registration files retain their pre-existing whole-file formatting deviations rather than receiving an unrelated reformat
+- Focused Prettier check for the Phase 8E migration regression test, package script, and audit documentation — passed; the SQL migration was reviewed with `git diff --check`
 - `server/auth.ts` and `client/contexts/AuthContext.tsx` remain part of the pre-existing whole-file formatting backlog; their Phase 8A edits were kept minimal rather than reformatting unrelated code
 - `npx prisma validate` — passed without connecting to or mutating a database
 - `git diff --check` — passed

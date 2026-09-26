@@ -17,11 +17,44 @@ ALTER TABLE "Exam" ADD CONSTRAINT "Exam_courseId_fkey" FOREIGN KEY ("courseId") 
 ALTER TABLE "ExamConcept" ADD CONSTRAINT "ExamConcept_examId_fkey" FOREIGN KEY ("examId") REFERENCES "Exam"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "ExamConcept" ADD CONSTRAINT "ExamConcept_conceptId_fkey" FOREIGN KEY ("conceptId") REFERENCES "Concept"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- Parse the legacy text field without allowing malformed or non-array JSON to
+-- abort the migration. This helper is migration-local and is dropped below.
+CREATE OR REPLACE FUNCTION "_studymind_20260924030000_safe_jsonb_array"("input" TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+    "parsed" JSONB;
+BEGIN
+    IF "input" IS NULL OR btrim("input") = '' THEN
+        RETURN '[]'::jsonb;
+    END IF;
+
+    BEGIN
+        "parsed" := "input"::jsonb;
+    EXCEPTION WHEN OTHERS THEN
+        RETURN '[]'::jsonb;
+    END;
+
+    IF jsonb_typeof("parsed") <> 'array' THEN
+        RETURN '[]'::jsonb;
+    END IF;
+
+    RETURN "parsed";
+END;
+$$;
+
 -- Preserve existing exams when their legacy topic scope resolves to one owned course.
 WITH "ExamTopicCourses" AS (
     SELECT "Exam"."id" AS "examId", "Topic"."courseId"
     FROM "Exam"
-    CROSS JOIN LATERAL jsonb_array_elements_text("Exam"."topicIds"::jsonb) AS "ScopedTopic"("topicId")
+    CROSS JOIN LATERAL (
+        SELECT "Element"."value" #>> '{}' AS "topicId"
+        FROM jsonb_array_elements("_studymind_20260924030000_safe_jsonb_array"("Exam"."topicIds")) AS "Element"("value")
+        WHERE jsonb_typeof("Element"."value") = 'string'
+          AND NULLIF(btrim("Element"."value" #>> '{}'), '') IS NOT NULL
+    ) AS "ScopedTopic"
     INNER JOIN "Topic" ON "Topic"."id" = "ScopedTopic"."topicId" AND "Topic"."userId" = "Exam"."userId"
     INNER JOIN "Course" ON "Course"."id" = "Topic"."courseId" AND "Course"."userId" = "Exam"."userId"
 ),
@@ -48,7 +81,12 @@ SELECT DISTINCT
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 FROM "Exam"
-CROSS JOIN LATERAL jsonb_array_elements_text("Exam"."topicIds"::jsonb) AS "ScopedTopic"("topicId")
+CROSS JOIN LATERAL (
+    SELECT "Element"."value" #>> '{}' AS "topicId"
+    FROM jsonb_array_elements("_studymind_20260924030000_safe_jsonb_array"("Exam"."topicIds")) AS "Element"("value")
+    WHERE jsonb_typeof("Element"."value") = 'string'
+      AND NULLIF(btrim("Element"."value" #>> '{}'), '') IS NOT NULL
+) AS "ScopedTopic"
 INNER JOIN "Topic" ON "Topic"."id" = "ScopedTopic"."topicId"
     AND "Topic"."courseId" = "Exam"."courseId"
     AND "Topic"."userId" = "Exam"."userId"
@@ -59,9 +97,16 @@ ON CONFLICT ("courseId", "topicId") DO NOTHING;
 INSERT INTO "ExamConcept" ("examId", "conceptId")
 SELECT DISTINCT "Exam"."id", "Concept"."id"
 FROM "Exam"
-CROSS JOIN LATERAL jsonb_array_elements_text("Exam"."topicIds"::jsonb) AS "ScopedTopic"("topicId")
+CROSS JOIN LATERAL (
+    SELECT "Element"."value" #>> '{}' AS "topicId"
+    FROM jsonb_array_elements("_studymind_20260924030000_safe_jsonb_array"("Exam"."topicIds")) AS "Element"("value")
+    WHERE jsonb_typeof("Element"."value") = 'string'
+      AND NULLIF(btrim("Element"."value" #>> '{}'), '') IS NOT NULL
+) AS "ScopedTopic"
 INNER JOIN "Concept" ON "Concept"."topicId" = "ScopedTopic"."topicId"
     AND "Concept"."courseId" = "Exam"."courseId"
     AND "Concept"."userId" = "Exam"."userId"
 WHERE "Exam"."courseId" IS NOT NULL
 ON CONFLICT ("examId", "conceptId") DO NOTHING;
+
+DROP FUNCTION "_studymind_20260924030000_safe_jsonb_array"(TEXT);
