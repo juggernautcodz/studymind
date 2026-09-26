@@ -21,6 +21,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system/legacy";
 import * as DocumentPicker from "expo-document-picker";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -37,6 +38,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
 import { createTopicWithServerSync } from "@/lib/serverSync";
 import { getApiUrl, getAuthHeaders, isNetworkError } from "@/lib/query-client";
+import {
+  completeDurableFlashcardReview,
+  completeDurableQuizSubmission,
+  studyEvidenceQueryKeys,
+} from "@/lib/studyEvidence";
+import {
+  fetchStudyTopicEvidence,
+  submitFlashcardReview,
+  submitQuizAttempt,
+} from "@/lib/studyEvidenceApi";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type {
   Topic,
@@ -61,11 +72,12 @@ export default function TopicScreen() {
   const { theme } = useTheme();
   const { showToast } = useToast();
   const { getAuthToken } = useAuth();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const route = useRoute<any>();
-  const { topicId, courseId, initialTab } = route.params;
+  const { topicId, courseId, initialTab, studyTodayAction } = route.params;
 
   const [topic, setTopic] = useState<Topic | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,6 +91,7 @@ export default function TopicScreen() {
     quiz: Quiz;
     questions: QuizQuestion[];
   } | null>(null);
+  const [studyEvidenceReady, setStudyEvidenceReady] = useState(false);
   const [showPasteSheet, setShowPasteSheet] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [showDestinationSheet, setShowDestinationSheet] = useState(false);
@@ -101,11 +114,48 @@ export default function TopicScreen() {
       setTopicNotes(notes);
       setTopicFlashcards(flashcards);
       setTopicQuizData(quizData);
+      setStudyEvidenceReady(false);
+
+      if (studyTodayAction) {
+        try {
+          const evidence = await fetchStudyTopicEvidence(topicId);
+          if (
+            studyTodayAction === "REVIEW_FLASHCARDS" &&
+            evidence.flashcards.length === 0
+          ) {
+            throw new Error("No server-backed flashcards are available");
+          }
+          if (
+            studyTodayAction === "TAKE_QUIZ" &&
+            (!evidence.quizData || evidence.quizData.questions.length === 0)
+          ) {
+            throw new Error("No server-backed quiz is available");
+          }
+          setTopicFlashcards(evidence.flashcards);
+          setTopicQuizData(evidence.quizData);
+          setStudyEvidenceReady(true);
+        } catch {
+          showToast({
+            type: "error",
+            title: "Study activity unavailable",
+            message:
+              "We couldn't load the server-backed activity. Your local study material is unchanged.",
+          });
+        }
+      }
       storage.recordTopicVisit(topicId).catch(() => {});
     } finally {
       setIsLoading(false);
     }
-  }, [topicId, courseId]);
+  }, [topicId, courseId, showToast, studyTodayAction]);
+
+  const refreshDurableEvidence = useCallback(async () => {
+    await Promise.allSettled(
+      studyEvidenceQueryKeys(courseId).map((queryKey) =>
+        queryClient.invalidateQueries({ queryKey: [...queryKey] }),
+      ),
+    );
+  }, [courseId, queryClient]);
 
   useFocusEffect(
     useCallback(() => {
@@ -571,6 +621,16 @@ export default function TopicScreen() {
             <FlashcardsTab
               flashcards={topicFlashcards}
               isGenerating={false}
+              onReview={
+                studyTodayAction === "REVIEW_FLASHCARDS" && studyEvidenceReady
+                  ? (input) =>
+                      completeDurableFlashcardReview({
+                        input,
+                        persist: submitFlashcardReview,
+                        onPersisted: refreshDurableEvidence,
+                      }).then(() => undefined)
+                  : undefined
+              }
               onGenerate={() => {
                 showToast({ type: "info", title: "Upload content", message: "Use the actions above to add study material and generate flashcards." });
               }}
@@ -583,6 +643,16 @@ export default function TopicScreen() {
             <QuizTab
               quizData={topicQuizData}
               isGenerating={false}
+              onSubmit={
+                studyTodayAction === "TAKE_QUIZ" && studyEvidenceReady
+                  ? (input) =>
+                      completeDurableQuizSubmission({
+                        input,
+                        persist: submitQuizAttempt,
+                        onPersisted: refreshDurableEvidence,
+                      })
+                  : undefined
+              }
               onGenerate={() => {
                 showToast({ type: "info", title: "Upload content", message: "Use the actions above to add study material and generate a quiz." });
               }}

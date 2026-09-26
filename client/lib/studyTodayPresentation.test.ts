@@ -167,6 +167,9 @@ test("supported actions map to existing topic tabs", () => {
   );
 
   assert.equal(flashcards.params.initialTab, "flashcards");
+  assert.equal(flashcards.params.studyTodayAction, "REVIEW_FLASHCARDS");
   assert.equal(quiz.params.initialTab, "quiz");
+  assert.equal(quiz.params.studyTodayAction, "TAKE_QUIZ");
   assert.equal(notes.params.initialTab, "notes");
+  assert.equal("studyTodayAction" in notes.params, false);
 });

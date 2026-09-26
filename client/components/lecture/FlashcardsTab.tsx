@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { View, StyleSheet, Pressable, useWindowDimensions } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -9,6 +9,7 @@ import Animated, {
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
+import { v4 as uuidv4 } from "uuid";
 import { shareOrDownload } from "@/lib/export";
 import { useToast } from "@/components/Toast";
 
@@ -19,17 +20,20 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type { Flashcard } from "@/types";
+import type { FlashcardReviewInput } from "@/lib/studyEvidence";
 
 interface FlashcardsTabProps {
   flashcards: Flashcard[];
   isGenerating: boolean;
   onGenerate: () => void;
+  onReview?: (input: FlashcardReviewInput) => Promise<void>;
 }
 
 export default function FlashcardsTab({
   flashcards,
   isGenerating,
   onGenerate,
+  onReview,
 }: FlashcardsTabProps) {
   const { theme } = useTheme();
   const { showToast } = useToast();
@@ -37,6 +41,11 @@ export default function FlashcardsTab({
   const CARD_WIDTH = screenWidth - Spacing.lg * 4;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [reviewingCardId, setReviewingCardId] = useState<string | null>(null);
+  const [reviewedCardIds, setReviewedCardIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const reviewEventIds = useRef<Record<string, string>>({});
   const flipProgress = useSharedValue(0);
 
   const frontAnimatedStyle = useAnimatedStyle(() => {
@@ -143,6 +152,38 @@ export default function FlashcardsTab({
       setCurrentIndex(currentIndex - 1);
       setIsFlipped(false);
       flipProgress.value = 0;
+    }
+  };
+
+  const handleReview = async (correct: boolean) => {
+    if (!onReview || reviewingCardId || reviewedCardIds.has(currentCard.id)) {
+      return;
+    }
+    const eventKey = `${currentCard.id}:${correct ? "correct" : "incorrect"}`;
+    const eventId = reviewEventIds.current[eventKey] ?? uuidv4();
+    reviewEventIds.current[eventKey] = eventId;
+    setReviewingCardId(currentCard.id);
+    try {
+      await onReview({ flashcardId: currentCard.id, correct, eventId });
+      setReviewedCardIds((current) => new Set(current).add(currentCard.id));
+      delete reviewEventIds.current[eventKey];
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast({
+        type: "success",
+        title: "Review saved",
+        message: correct
+          ? "Marked correct. Your schedule and mastery are updated."
+          : "Marked for more practice. Your schedule and mastery are updated.",
+      });
+    } catch {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast({
+        type: "error",
+        title: "Review not saved",
+        message: "Check your connection and try this card again.",
+      });
+    } finally {
+      setReviewingCardId(null);
     }
   };
 
@@ -264,6 +305,35 @@ export default function FlashcardsTab({
           />
         </Pressable>
       </View>
+
+      {onReview && isFlipped ? (
+        <View style={styles.reviewActions}>
+          {reviewedCardIds.has(currentCard.id) ? (
+            <ThemedText type="small" style={{ color: theme.success }}>
+              Review saved
+            </ThemedText>
+          ) : (
+            <>
+              <Button
+                onPress={() => void handleReview(false)}
+                disabled={reviewingCardId !== null}
+                variant="secondary"
+                style={styles.reviewButton}
+              >
+                Review Again
+              </Button>
+              <Button
+                onPress={() => void handleReview(true)}
+                loading={reviewingCardId === currentCard.id}
+                disabled={reviewingCardId !== null}
+                style={styles.reviewButton}
+              >
+                Got It
+              </Button>
+            </>
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.cardActions}>
         <Pressable
@@ -399,6 +469,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: Spacing.sm,
     marginTop: Spacing.md,
+  },
+  reviewActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+  },
+  reviewButton: {
+    flex: 1,
   },
   cardActionButton: {
     flexDirection: "row",
