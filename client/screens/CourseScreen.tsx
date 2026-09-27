@@ -42,6 +42,7 @@ import { useToast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
 import { createTopicWithServerSync, syncTopicToServer, ensureCourseOnServer } from "@/lib/serverSync";
+import { createImageSource, type CreatedSource } from "@/lib/sourceLock";
 import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type {
@@ -99,7 +100,11 @@ export default function CourseScreen() {
     text: string;
     source: string;
     imageUri?: string;
+    mimeType?: string;
+    captureId: number;
   } | null>(null);
+  const captureSequence = useRef(0);
+  const imageSourceRequests = useRef(new Map<number, Promise<CreatedSource>>());
 
   const [allNotes, setAllNotes] = useState<Notes[]>([]);
   const [allFlashcards, setAllFlashcards] = useState<Flashcard[]>([]);
@@ -275,7 +280,12 @@ export default function CourseScreen() {
           const ocrText = await extractImageText(result.assets[0].uri);
           setIsUploading(false);
           if (ocrText.trim().length >= 20) {
-            showDestinationPicker("Camera", ocrText, result.assets[0].uri);
+            showDestinationPicker(
+              "Camera",
+              ocrText,
+              result.assets[0].uri,
+              result.assets[0].mimeType,
+            );
           } else {
             showToast({
               type: "warning",
@@ -322,7 +332,12 @@ export default function CourseScreen() {
           const ocrText = await extractImageText(result.assets[0].uri);
           setIsUploading(false);
           if (ocrText.trim().length >= 20) {
-            showDestinationPicker("Gallery", ocrText, result.assets[0].uri);
+            showDestinationPicker(
+              "Gallery",
+              ocrText,
+              result.assets[0].uri,
+              result.assets[0].mimeType,
+            );
           } else {
             showToast({
               type: "warning",
@@ -505,11 +520,35 @@ export default function CourseScreen() {
     }
   };
 
+  const persistImageSourceOnce = (
+    captureId: number,
+    topicId: string,
+    source: string,
+    text: string,
+    mimeType?: string,
+  ): Promise<CreatedSource> => {
+    const existing = imageSourceRequests.current.get(captureId);
+    if (existing) return existing;
+
+    const request = createImageSource({
+      courseId,
+      topicId,
+      title: `${source} image`,
+      extractedText: text,
+      mimeType,
+    }).catch((error) => {
+      imageSourceRequests.current.delete(captureId);
+      throw error;
+    });
+    imageSourceRequests.current.set(captureId, request);
+    return request;
+  };
+
   const handleDestinationSelect = async (destination: ContentDestination) => {
     setShowDestinationSheet(false);
     if (!pendingContent) return;
 
-    const { text, source, imageUri } = pendingContent;
+    const { text, source, imageUri, mimeType, captureId } = pendingContent;
     setPendingContent(null);
 
     setIsUploading(true);
@@ -539,20 +578,46 @@ export default function CourseScreen() {
         ocrText: text,
       });
 
+      let sourcePersistenceFailed = false;
+      if (imageUri) {
+        setUploadingLabel("Saving source to Course Brain...");
+        try {
+          await persistImageSourceOnce(
+            captureId,
+            targetTopicId,
+            source,
+            text,
+            mimeType,
+          );
+        } catch (error) {
+          sourcePersistenceFailed = true;
+          console.warn("[CourseScreen] Image SourceLock persistence failed:", error);
+        }
+      }
+
       const sectionLabel =
         destination === "new-section" ? source : undefined;
       await generateStudyMaterials(text, targetTopicId, sectionLabel);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast({
-        type: "success",
-        title: "Study materials created!",
-        message:
-          destination === "new-topic"
-            ? "New topic created with notes, flashcards, and quiz."
-            : destination === "new-section"
-              ? `Added as "${source}" section with notes, flashcards, and quiz.`
-              : "Notes, flashcards, and quiz merged into topic.",
-      });
+      if (sourcePersistenceFailed) {
+        showToast({
+          type: "warning",
+          title: "Course Brain source not saved",
+          message:
+            "Study materials were generated, but we could not confirm the image was added to Sources. Check Course Brain before retrying.",
+        });
+      } else {
+        showToast({
+          type: "success",
+          title: "Study materials created!",
+          message:
+            destination === "new-topic"
+              ? "New topic created with notes, flashcards, and quiz."
+              : destination === "new-section"
+                ? `Added as "${source}" section with notes, flashcards, and quiz.`
+                : "Notes, flashcards, and quiz merged into topic.",
+        });
+      }
       loadData();
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -570,8 +635,16 @@ export default function CourseScreen() {
     source: string,
     text: string,
     imageUri?: string,
+    mimeType?: string,
   ) => {
-    setPendingContent({ text, source, imageUri });
+    captureSequence.current += 1;
+    setPendingContent({
+      text,
+      source,
+      imageUri,
+      mimeType,
+      captureId: captureSequence.current,
+    });
     setShowDestinationSheet(true);
   };
 
@@ -646,7 +719,7 @@ export default function CourseScreen() {
           const ocrText = await extractImageText(asset.uri);
           setIsUploading(false);
           if (ocrText.trim().length >= 20) {
-            showDestinationPicker("Upload", ocrText, asset.uri);
+            showDestinationPicker("Upload", ocrText, asset.uri, asset.mimeType);
           } else {
             showToast({
               type: "warning",

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   StyleSheet,
@@ -38,6 +38,7 @@ import { useToast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
 import { createTopicWithServerSync } from "@/lib/serverSync";
+import { createImageSource, type CreatedSource } from "@/lib/sourceLock";
 import { getApiUrl, getAuthHeaders, isNetworkError } from "@/lib/query-client";
 import {
   completeDurableFlashcardReview,
@@ -105,7 +106,11 @@ export default function TopicScreen() {
     text: string;
     source: string;
     imageUri?: string;
+    mimeType?: string;
+    captureId: number;
   } | null>(null);
+  const captureSequence = useRef(0);
+  const imageSourceRequests = useRef(new Map<number, Promise<CreatedSource>>());
 
   const loadData = useCallback(async () => {
     if (studyTodayAction) setIsLoading(true);
@@ -229,7 +234,12 @@ export default function TopicScreen() {
         try {
           const ocrText = await extractImageText(result.assets[0].uri);
           if (ocrText.trim().length >= 20) {
-            showDestinationPicker("Camera", ocrText, result.assets[0].uri);
+            showDestinationPicker(
+              "Camera",
+              ocrText,
+              result.assets[0].uri,
+              result.assets[0].mimeType,
+            );
           } else {
             showToast({ type: "warning", title: "Not Enough Text", message: "Could not extract enough text from the image. Try a clearer photo." });
           }
@@ -259,7 +269,12 @@ export default function TopicScreen() {
         try {
           const ocrText = await extractImageText(result.assets[0].uri);
           if (ocrText.trim().length >= 20) {
-            showDestinationPicker("Gallery", ocrText, result.assets[0].uri);
+            showDestinationPicker(
+              "Gallery",
+              ocrText,
+              result.assets[0].uri,
+              result.assets[0].mimeType,
+            );
           } else {
             showToast({ type: "warning", title: "Not Enough Text", message: "Could not extract enough text from the image. Try a clearer photo." });
           }
@@ -427,16 +442,48 @@ export default function TopicScreen() {
     source: string,
     text: string,
     imageUri?: string,
+    mimeType?: string,
   ) => {
-    setPendingContent({ text, source, imageUri });
+    captureSequence.current += 1;
+    setPendingContent({
+      text,
+      source,
+      imageUri,
+      mimeType,
+      captureId: captureSequence.current,
+    });
     setShowDestinationSheet(true);
+  };
+
+  const persistImageSourceOnce = (
+    captureId: number,
+    targetTopicId: string,
+    source: string,
+    text: string,
+    mimeType?: string,
+  ): Promise<CreatedSource> => {
+    const existing = imageSourceRequests.current.get(captureId);
+    if (existing) return existing;
+
+    const request = createImageSource({
+      courseId,
+      topicId: targetTopicId,
+      title: `${source} image`,
+      extractedText: text,
+      mimeType,
+    }).catch((error) => {
+      imageSourceRequests.current.delete(captureId);
+      throw error;
+    });
+    imageSourceRequests.current.set(captureId, request);
+    return request;
   };
 
   const handleDestinationSelect = async (destination: ContentDestination) => {
     setShowDestinationSheet(false);
     if (!pendingContent) return;
 
-    const { text, source, imageUri } = pendingContent;
+    const { text, source, imageUri, mimeType, captureId } = pendingContent;
     setPendingContent(null);
 
     setIsUploading(true);
@@ -460,10 +507,35 @@ export default function TopicScreen() {
         ocrText: text,
       });
 
+      let sourcePersistenceFailed = false;
+      if (imageUri) {
+        setUploadingLabel("Saving source to Course Brain...");
+        try {
+          await persistImageSourceOnce(
+            captureId,
+            targetTopicId,
+            source,
+            text,
+            mimeType,
+          );
+        } catch (error) {
+          sourcePersistenceFailed = true;
+          console.warn("[TopicScreen] Image SourceLock persistence failed:", error);
+        }
+      }
+
       const sectionLabel =
         destination === "new-section" ? source : undefined;
       const generated = await generateStudyMaterials(text, targetTopicId, sectionLabel);
-      if (generated > 0) {
+      if (generated > 0 && sourcePersistenceFailed) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        showToast({
+          type: "warning",
+          title: "Course Brain source not saved",
+          message:
+            "Study materials were generated, but we could not confirm the image was added to Sources. Check Course Brain before retrying.",
+        });
+      } else if (generated > 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         showToast({
           type: "success",
@@ -480,14 +552,18 @@ export default function TopicScreen() {
         showToast({
           type: "warning",
           title: "You appear to be offline",
-          message: "Connect to the internet and tap an action button to try again.",
+          message: sourcePersistenceFailed
+            ? "The image was not saved to Course Brain Sources. Connect to the internet and check Course Brain before retrying."
+            : "Connect to the internet and tap an action button to try again.",
         });
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         showToast({
           type: "error",
           title: "AI unavailable",
-          message: "Could not generate study materials. Please try again.",
+          message: sourcePersistenceFailed
+            ? "Could not generate study materials, and the image was not saved to Course Brain Sources."
+            : "Could not generate study materials. Please try again.",
         });
       }
       loadData();
@@ -540,7 +616,7 @@ export default function TopicScreen() {
         try {
           const ocrText = await extractImageText(asset.uri);
           if (ocrText.trim().length >= 20) {
-            showDestinationPicker("Upload", ocrText, asset.uri);
+            showDestinationPicker("Upload", ocrText, asset.uri, asset.mimeType);
           } else {
             showToast({ type: "warning", title: "Not Enough Text", message: "Could not extract enough text from the image. Try a clearer photo." });
           }
