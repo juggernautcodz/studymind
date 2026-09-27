@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
 
 export interface CreateImageSourceInput {
@@ -10,6 +11,68 @@ export interface CreateImageSourceInput {
 
 export interface CreatedSource {
   id: string;
+}
+
+export interface SourceLockSourceSummary {
+  id: string;
+  kind: string;
+  title: string;
+  topicId: string | null;
+  currentRevision: number;
+  createdAt: string;
+  updatedAt: string;
+  revisions: Array<{
+    id: string;
+    revision: number;
+    contentHash: string;
+    contentLength: number;
+    createdAt: string;
+    _count: { segments: number };
+  }>;
+}
+
+interface SourcesResponse {
+  sources: SourceLockSourceSummary[];
+}
+
+export const courseSourcesQueryKey = (courseId: string) =>
+  ["course-sources", courseId] as const;
+
+async function fetchCourseSources(
+  courseId: string,
+): Promise<SourceLockSourceSummary[]> {
+  const authHeaders = await getAuthHeaders();
+  if (!authHeaders.Authorization) throw new Error("Authentication required");
+
+  const response = await fetch(
+    new URL(
+      `/api/courses/${encodeURIComponent(courseId)}/sources`,
+      getApiUrl(),
+    ).toString(),
+    {
+      method: "GET",
+      headers: authHeaders,
+      credentials: "include",
+    },
+  );
+
+  const payload = (await response
+    .json()
+    .catch(() => null)) as SourcesResponse | null;
+  if (!response.ok || !payload || !Array.isArray(payload.sources)) {
+    throw new Error(errorMessage(payload, "Could not load course sources"));
+  }
+
+  return payload.sources;
+}
+
+export function useCourseSources(courseId: string) {
+  return useQuery({
+    queryKey: courseSourcesQueryKey(courseId),
+    queryFn: () => fetchCourseSources(courseId),
+    enabled: courseId.length > 0,
+    staleTime: 30_000,
+  });
 }
 
 const MAX_SEGMENT_CHARACTERS = 20_000;

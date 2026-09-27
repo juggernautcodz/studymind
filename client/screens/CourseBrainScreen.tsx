@@ -1,5 +1,5 @@
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useRoute } from "@react-navigation/native";
 import { useNavigation } from "@react-navigation/native";
@@ -72,14 +72,35 @@ export default function CourseBrainScreen() {
         <SectionHeader title="Course overview" icon="book-open" />
         <Card style={styles.card}>
           <View style={styles.countGrid}>
-            {countItems.map(([label, value]) => (
-              <View key={label} style={styles.countItem}>
-                <ThemedText type="h3">{value}</ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                  {label}
-                </ThemedText>
-              </View>
-            ))}
+            {countItems.map(([label, value]) => {
+              const countContent = (
+                <>
+                  <ThemedText type="h3">{value}</ThemedText>
+                  <ThemedText
+                    type="small"
+                    style={{ color: theme.textSecondary }}
+                  >
+                    {label}
+                  </ThemedText>
+                </>
+              );
+
+              return label === "Sources" ? (
+                <Pressable
+                  key={label}
+                  onPress={() => navigation.navigate("Sources", { courseId })}
+                  style={styles.countItem}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${value} course sources`}
+                >
+                  {countContent}
+                </Pressable>
+              ) : (
+                <View key={label} style={styles.countItem}>
+                  {countContent}
+                </View>
+              );
+            })}
           </View>
           <ThemedText type="small" style={{ color: theme.textSecondary }}>
             {brain.quizPerformance.accuracyPercent === null
