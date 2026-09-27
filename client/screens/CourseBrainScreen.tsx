@@ -105,7 +105,14 @@ export default function CourseBrainScreen() {
           </Card>
         ) : (
           brain.topics.map((topic) => (
-            <Card key={topic.id} style={styles.topicCard}>
+            <Card
+              key={topic.id}
+              style={styles.topicCard}
+              onPress={() =>
+                navigation.navigate("Topic", { topicId: topic.id, courseId })
+              }
+              accessibilityLabel={`Open topic ${topic.name}`}
+            >
               <ThemedText type="h4">{topic.name}</ThemedText>
               <ThemedText type="small" style={{ color: theme.textSecondary }}>
                 {`${topic.counts.recordings} recordings · ${topic.counts.flashcards} flashcards · ${topic.counts.quizzes} quizzes · ${topic.counts.quizAttempts} attempts`}
