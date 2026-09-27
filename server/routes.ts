@@ -42,6 +42,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   try {
+    const { createProductionOriginalImagesRouter } = await import("./original-images");
+    const originalImagesRoutes = await createProductionOriginalImagesRouter();
+    safeMount(app, "/api", originalImagesRoutes, "original images");
+  } catch (err) {
+    console.warn("Failed to load original image routes:", err);
+  }
+
+  try {
     const lectureAutopilotRoutes = (await import("./lecture-autopilot")).default;
     safeMount(app, "/api", lectureAutopilotRoutes, "lecture autopilot");
   } catch (err) {
