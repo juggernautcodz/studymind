@@ -581,6 +581,68 @@ function routerFakes(calls: { storage: number; db: number }) {
   };
 }
 
+test("router returns the minimal canonical upload body for new and replayed uploads", async () => {
+  let stored: {
+    id: string;
+    topicId: string;
+    filename: string;
+    filepath: string;
+    ocrText: string;
+  } | null = null;
+  let storageUploads = 0;
+  const options = {
+    authenticate: (req: any, _res: any, next: () => void) => {
+      req.user = { id: "user", email: "x@y.z" };
+      next();
+    },
+    requireOwned: async () => {},
+    db: {
+      whiteboardImage: {
+        findUnique: async () => stored,
+        create: async ({ data }: any) => {
+          stored = data;
+          return data;
+        },
+      },
+    },
+    storage: {
+      uploadBytes: async () => {
+        storageUploads++;
+      },
+      deleteIfPresent: async () => {},
+    } as any,
+  } as any;
+  const expected = { whiteboardImage: { id, mimeType: "image/png" } };
+  const prohibitedFields = [
+    "topicId",
+    "filename",
+    "ocrText",
+    "filepath",
+    "key",
+    "bucket",
+    "provider",
+    "originalFilename",
+  ];
+
+  await withRouter(options, async (url) => {
+    for (const expectedStatus of [201, 200]) {
+      const response = await fetch(url, {
+        method: "POST",
+        // The client filename is intentionally misleading: MIME comes from server validation.
+        body: uploadForm({ image: new Blob([png], { type: "image/png" }) }),
+      });
+      const body = await response.json();
+      assert.equal(response.status, expectedStatus);
+      assert.deepEqual(body, expected);
+      for (const field of prohibitedFields) {
+        assert.equal(field in body, false);
+        assert.equal(field in body.whiteboardImage, false);
+      }
+    }
+  });
+  assert.equal(storageUploads, 1);
+});
+
 test("recognizes only complete canonical permitted image types", () => {
   for (const [bytes, mime] of valid)
     assert.equal(detectOriginalImageMimeType(bytes), mime);

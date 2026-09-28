@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Platform } from "react-native";
 import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
 
 export interface CreateImageSourceInput {
@@ -7,10 +8,25 @@ export interface CreateImageSourceInput {
   title: string;
   extractedText: string;
   mimeType?: string;
+  whiteboardImageId?: string;
 }
 
 export interface CreatedSource {
   id: string;
+}
+
+export interface UploadWhiteboardImageInput {
+  courseId: string;
+  topicId: string;
+  imageUri: string;
+  uploadId: string;
+  ocrText: string;
+  mimeType?: string;
+}
+
+export interface UploadedWhiteboardImage {
+  id: string;
+  mimeType: string;
 }
 
 export interface SourceLockSourceSummary {
@@ -77,6 +93,15 @@ export function useCourseSources(courseId: string) {
 
 const MAX_SEGMENT_CHARACTERS = 20_000;
 const MAX_SOURCE_CHARACTERS = 250_000;
+const UUID_V4_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WHITEBOARD_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
 
 function errorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== "object") return fallback;
@@ -108,6 +133,80 @@ function ocrSegments(extractedText: string) {
       };
     },
   );
+}
+
+/**
+ * Uploads a captured original image once its destination topic is known. The
+ * uploadId is deliberately supplied by the caller so a capture keeps the same
+ * id through destination selection and an accidental duplicate submission is
+ * replay-safe on the server.
+ */
+export async function uploadWhiteboardImage(
+  input: UploadWhiteboardImageInput,
+): Promise<UploadedWhiteboardImage> {
+  if (
+    !input.courseId ||
+    !input.topicId ||
+    !input.imageUri ||
+    !input.uploadId ||
+    !input.ocrText.trim()
+  ) {
+    throw new Error("Original image details are incomplete");
+  }
+
+  const authHeaders = await getAuthHeaders();
+  if (!authHeaders.Authorization) throw new Error("Authentication required");
+
+  const mimeType = input.mimeType || "image/jpeg";
+  const form = new FormData();
+  form.append("uploadId", input.uploadId);
+  form.append("ocrText", input.ocrText);
+
+  if (Platform.OS === "web") {
+    const imageResponse = await fetch(input.imageUri);
+    if (!imageResponse.ok) throw new Error("Could not read original image");
+    form.append("image", await imageResponse.blob(), "whiteboard-image");
+  } else {
+    form.append("image", {
+      uri: input.imageUri,
+      name: "whiteboard-image",
+      type: mimeType,
+    } as unknown as Blob);
+  }
+
+  const response = await fetch(
+    new URL(
+      `/api/courses/${encodeURIComponent(input.courseId)}/topics/${encodeURIComponent(input.topicId)}/whiteboard-images`,
+      getApiUrl(),
+    ).toString(),
+    {
+      method: "POST",
+      // Do not set Content-Type: fetch/RN supplies the multipart boundary.
+      headers: authHeaders,
+      credentials: "include",
+      body: form,
+    },
+  );
+
+  const payload = (await response.json().catch(() => null)) as {
+    whiteboardImage?: { id?: unknown; mimeType?: unknown };
+  } | null;
+  if (!response.ok) {
+    throw new Error(errorMessage(payload, "Could not preserve original image"));
+  }
+
+  const whiteboardImage = payload?.whiteboardImage;
+  if (
+    !whiteboardImage ||
+    typeof whiteboardImage.id !== "string" ||
+    !UUID_V4_PATTERN.test(whiteboardImage.id) ||
+    typeof whiteboardImage.mimeType !== "string" ||
+    !WHITEBOARD_IMAGE_MIME_TYPES.has(whiteboardImage.mimeType)
+  ) {
+    throw new Error("Original image upload response was invalid");
+  }
+
+  return { id: whiteboardImage.id, mimeType: whiteboardImage.mimeType };
 }
 
 /**
@@ -148,6 +247,9 @@ export async function createImageSource(
         mimeType: input.mimeType || "image/jpeg",
         segments: ocrSegments(extractedText),
         generation: { operation: "image-ocr" },
+        ...(input.whiteboardImageId
+          ? { whiteboardImageId: input.whiteboardImageId }
+          : {}),
       }),
     },
   );

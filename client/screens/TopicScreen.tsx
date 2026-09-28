@@ -22,6 +22,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system/legacy";
 import * as DocumentPicker from "expo-document-picker";
 import { useQueryClient } from "@tanstack/react-query";
+import { v4 as uuidv4 } from "uuid";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -38,7 +39,12 @@ import { useToast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
 import { createTopicWithServerSync } from "@/lib/serverSync";
-import { createImageSource, type CreatedSource } from "@/lib/sourceLock";
+import {
+  createImageSource,
+  uploadWhiteboardImage,
+  type CreatedSource,
+  type UploadedWhiteboardImage,
+} from "@/lib/sourceLock";
 import { getApiUrl, getAuthHeaders, isNetworkError } from "@/lib/query-client";
 import {
   completeDurableFlashcardReview,
@@ -54,13 +60,7 @@ import {
   submitQuizAttempt,
 } from "@/lib/studyEvidenceApi";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import type {
-  Topic,
-  Notes,
-  Flashcard,
-  Quiz,
-  QuizQuestion,
-} from "@/types";
+import type { Topic, Notes, Flashcard, Quiz, QuizQuestion } from "@/types";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import NotesTab from "@/components/lecture/NotesTab";
@@ -108,20 +108,24 @@ export default function TopicScreen() {
     imageUri?: string;
     mimeType?: string;
     captureId: number;
+    uploadId?: string;
   } | null>(null);
   const captureSequence = useRef(0);
   const imageSourceRequests = useRef(new Map<number, Promise<CreatedSource>>());
+  const originalImageUploadRequests = useRef(
+    new Map<number, Promise<UploadedWhiteboardImage>>(),
+  );
+  const destinationSelectInFlight = useRef(false);
 
   const loadData = useCallback(async () => {
     if (studyTodayAction) setIsLoading(true);
     try {
-      const [loadedTopic, notes, flashcards, quizData] =
-        await Promise.all([
-          storage.getTopic(topicId),
-          storage.getNotes(topicId),
-          storage.getFlashcards(topicId),
-          storage.getQuiz(topicId),
-        ]);
+      const [loadedTopic, notes, flashcards, quizData] = await Promise.all([
+        storage.getTopic(topicId),
+        storage.getNotes(topicId),
+        storage.getFlashcards(topicId),
+        storage.getQuiz(topicId),
+      ]);
       setTopic(loadedTopic);
       setTopicNotes(notes);
       setTopicFlashcards(flashcards);
@@ -211,7 +215,11 @@ export default function TopicScreen() {
   const handleRecord = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    showToast({ type: "success", title: "Starting recording", message: "Recording for this topic..." });
+    showToast({
+      type: "success",
+      title: "Starting recording",
+      message: "Recording for this topic...",
+    });
     navigation.navigate("Record", { topicId });
   };
 
@@ -222,11 +230,17 @@ export default function TopicScreen() {
         showToast({
           type: "warning",
           title: Platform.OS !== "web" ? "Permission needed" : "Not available",
-          message: Platform.OS !== "web" ? "Please allow camera access to capture notes." : "Camera not available on web. Use file upload instead.",
+          message:
+            Platform.OS !== "web"
+              ? "Please allow camera access to capture notes."
+              : "Camera not available on web. Use file upload instead.",
         });
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.8,
+      });
       if (!result.canceled && result.assets[0]) {
         setIsUploading(true);
         setUploadingLabel("Extracting text from image...");
@@ -241,27 +255,49 @@ export default function TopicScreen() {
               result.assets[0].mimeType,
             );
           } else {
-            showToast({ type: "warning", title: "Not Enough Text", message: "Could not extract enough text from the image. Try a clearer photo." });
+            showToast({
+              type: "warning",
+              title: "Not Enough Text",
+              message:
+                "Could not extract enough text from the image. Try a clearer photo.",
+            });
           }
         } catch {
-          showToast({ type: "error", title: "Could Not Read Image", message: "Make sure the text is clearly visible and try again." });
+          showToast({
+            type: "error",
+            title: "Could Not Read Image",
+            message: "Make sure the text is clearly visible and try again.",
+          });
         } finally {
           setIsUploading(false);
         }
       }
     } catch {
-      showToast({ type: "error", title: "Camera Error", message: "Failed to access camera. Please try again." });
+      showToast({
+        type: "error",
+        title: "Camera Error",
+        message: "Failed to access camera. Please try again.",
+      });
     }
   };
 
   const handlePickGallery = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        showToast({ type: "warning", title: "Permission needed", message: "Allow access to your photo library." });
+        showToast({
+          type: "warning",
+          title: "Permission needed",
+          message: "Allow access to your photo library.",
+        });
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, quality: 0.8 });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.8,
+      });
       if (!result.canceled && result.assets[0]) {
         setIsUploading(true);
         setUploadingLabel("Extracting text from image...");
@@ -276,22 +312,37 @@ export default function TopicScreen() {
               result.assets[0].mimeType,
             );
           } else {
-            showToast({ type: "warning", title: "Not Enough Text", message: "Could not extract enough text from the image. Try a clearer photo." });
+            showToast({
+              type: "warning",
+              title: "Not Enough Text",
+              message:
+                "Could not extract enough text from the image. Try a clearer photo.",
+            });
           }
         } catch {
-          showToast({ type: "error", title: "Could Not Read Image", message: "Make sure the text is clearly visible and try again." });
+          showToast({
+            type: "error",
+            title: "Could Not Read Image",
+            message: "Make sure the text is clearly visible and try again.",
+          });
         } finally {
           setIsUploading(false);
         }
       }
     } catch {
-      showToast({ type: "error", title: "Gallery Error", message: "Failed to pick image. Please try again." });
+      showToast({
+        type: "error",
+        title: "Gallery Error",
+        message: "Failed to pick image. Please try again.",
+      });
     }
   };
 
   const readFileAsBase64 = async (uri: string): Promise<string> => {
     if (Platform.OS !== "web") {
-      return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      return FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
     }
     const resp = await fetch(uri);
     const blob = await resp.blob();
@@ -317,7 +368,11 @@ export default function TopicScreen() {
 
   const compressImage = async (uri: string): Promise<string> => {
     try {
-      const manipResult = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 1024 } }], { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG });
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG },
+      );
       return manipResult.uri;
     } catch {
       return uri;
@@ -358,7 +413,9 @@ export default function TopicScreen() {
       if (notesRes.status === "fulfilled" && notesRes.value.ok) {
         const data = await notesRes.value.json();
         if (data.summary) {
-          const summaryBullets = data.summary.split(/\n+/).filter((line: string) => line.trim());
+          const summaryBullets = data.summary
+            .split(/\n+/)
+            .filter((line: string) => line.trim());
           const timestamp = new Date().toLocaleString("en-US", {
             month: "short",
             day: "numeric",
@@ -368,36 +425,62 @@ export default function TopicScreen() {
           const heading = sectionLabel
             ? `${sectionLabel} (${timestamp})`
             : `Notes (${timestamp})`;
-          await storage.saveNotes({ topicId: targetTopicId, title: "Study Notes", sections: [{ heading, bullets: summaryBullets }] });
+          await storage.saveNotes({
+            topicId: targetTopicId,
+            title: "Study Notes",
+            sections: [{ heading, bullets: summaryBullets }],
+          });
           generated++;
         }
       }
       if (flashcardsRes.status === "fulfilled" && flashcardsRes.value.ok) {
         const data = await flashcardsRes.value.json();
         if (data.flashcards && data.flashcards.length > 0) {
-          await storage.saveFlashcards(targetTopicId, data.flashcards.map((c: any, i: number) => ({ question: c.front, answer: c.back, orderIndex: i, sourceQuote: c.quote })));
+          await storage.saveFlashcards(
+            targetTopicId,
+            data.flashcards.map((c: any, i: number) => ({
+              question: c.front,
+              answer: c.back,
+              orderIndex: i,
+              sourceQuote: c.quote,
+            })),
+          );
           generated++;
         }
       }
       if (quizRes.status === "fulfilled" && quizRes.value.ok) {
         const data = await quizRes.value.json();
         if (data.questions && data.questions.length > 0) {
-          await storage.saveQuiz(targetTopicId, data.questions.map((q: any) => ({ question: q.question, options: q.options, correctIndex: typeof q.correctAnswer === "number" ? q.correctAnswer : 0 })));
+          await storage.saveQuiz(
+            targetTopicId,
+            data.questions.map((q: any) => ({
+              question: q.question,
+              options: q.options,
+              correctIndex:
+                typeof q.correctAnswer === "number" ? q.correctAnswer : 0,
+            })),
+          );
           generated++;
         }
       }
       if (generated === 0) {
         likelyOffline = [notesRes, flashcardsRes, quizRes].some(
-          (r) => r.status === "rejected" && isNetworkError((r as PromiseRejectedResult).reason),
+          (r) =>
+            r.status === "rejected" &&
+            isNetworkError((r as PromiseRejectedResult).reason),
         );
       }
       if (generated > 0) {
         await storage.updateTopic(targetTopicId, { status: "completed" });
-        if (__DEV__) console.log(`[TopicScreen] Topic status -> completed (${generated}/3 generated)`);
+        if (__DEV__)
+          console.log(
+            `[TopicScreen] Topic status -> completed (${generated}/3 generated)`,
+          );
       }
     } catch (err) {
       if (isNetworkError(err)) likelyOffline = true;
-      if (__DEV__) console.log("[TopicScreen] generateStudyMaterials error:", err);
+      if (__DEV__)
+        console.log("[TopicScreen] generateStudyMaterials error:", err);
     }
     if (likelyOffline && generated === 0) return -1;
     return generated;
@@ -451,6 +534,7 @@ export default function TopicScreen() {
       imageUri,
       mimeType,
       captureId: captureSequence.current,
+      uploadId: imageUri ? uuidv4() : undefined,
     });
     setShowDestinationSheet(true);
   };
@@ -461,6 +545,7 @@ export default function TopicScreen() {
     source: string,
     text: string,
     mimeType?: string,
+    whiteboardImageId?: string,
   ): Promise<CreatedSource> => {
     const existing = imageSourceRequests.current.get(captureId);
     if (existing) return existing;
@@ -471,6 +556,7 @@ export default function TopicScreen() {
       title: `${source} image`,
       extractedText: text,
       mimeType,
+      whiteboardImageId,
     }).catch((error) => {
       imageSourceRequests.current.delete(captureId);
       throw error;
@@ -480,98 +566,163 @@ export default function TopicScreen() {
   };
 
   const handleDestinationSelect = async (destination: ContentDestination) => {
-    setShowDestinationSheet(false);
-    if (!pendingContent) return;
-
-    const { text, source, imageUri, mimeType, captureId } = pendingContent;
-    setPendingContent(null);
-
-    setIsUploading(true);
-    setUploadingLabel("Generating study materials...");
+    if (destinationSelectInFlight.current) return;
+    destinationSelectInFlight.current = true;
 
     try {
-      let targetTopicId = topicId;
+      setShowDestinationSheet(false);
+      if (!pendingContent) return;
 
-      if (destination === "new-topic") {
-        const newId = await createNewTopicForContent(source);
-        if (!newId) {
-          showToast({ type: "error", title: "Error", message: "Could not create a new topic." });
-          return;
+      const { text, source, imageUri, mimeType, captureId, uploadId } =
+        pendingContent;
+      setPendingContent(null);
+
+      setIsUploading(true);
+      setUploadingLabel("Generating study materials...");
+
+      try {
+        let targetTopicId = topicId;
+
+        if (destination === "new-topic") {
+          const newId = await createNewTopicForContent(source);
+          if (!newId) {
+            showToast({
+              type: "error",
+              title: "Error",
+              message: "Could not create a new topic.",
+            });
+            return;
+          }
+          targetTopicId = newId;
         }
-        targetTopicId = newId;
-      }
 
-      await storage.saveWhiteboardImage({
-        topicId: targetTopicId,
-        imagePath: imageUri || "",
-        ocrText: text,
-      });
+        await storage.saveWhiteboardImage({
+          topicId: targetTopicId,
+          imagePath: imageUri || "",
+          ocrText: text,
+        });
 
-      let sourcePersistenceFailed = false;
-      if (imageUri) {
-        setUploadingLabel("Saving source to Course Brain...");
-        try {
-          await persistImageSourceOnce(
-            captureId,
-            targetTopicId,
-            source,
-            text,
-            mimeType,
-          );
-        } catch (error) {
-          sourcePersistenceFailed = true;
-          console.warn("[TopicScreen] Image SourceLock persistence failed:", error);
+        let uploadedImage: UploadedWhiteboardImage | null = null;
+        let originalImageUploadFailed = false;
+        if (imageUri && uploadId) {
+          setUploadingLabel("Preserving original image...");
+          try {
+            const existingUpload =
+              originalImageUploadRequests.current.get(captureId);
+            const upload =
+              existingUpload ??
+              uploadWhiteboardImage({
+                courseId,
+                topicId: targetTopicId,
+                imageUri,
+                uploadId,
+                ocrText: text,
+                mimeType,
+              });
+            if (!existingUpload) {
+              originalImageUploadRequests.current.set(captureId, upload);
+            }
+            uploadedImage = await upload;
+          } catch (error) {
+            originalImageUploadFailed = true;
+            console.warn("[TopicScreen] Original image upload failed:", error);
+          }
         }
-      }
 
-      const sectionLabel =
-        destination === "new-section" ? source : undefined;
-      const generated = await generateStudyMaterials(text, targetTopicId, sectionLabel);
-      if (generated > 0 && sourcePersistenceFailed) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        showToast({
-          type: "warning",
-          title: "Course Brain source not saved",
-          message:
-            "Study materials were generated, but we could not confirm the image was added to Sources. Check Course Brain before retrying.",
-        });
-      } else if (generated > 0) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        showToast({
-          type: "success",
-          title: "Study materials created!",
-          message:
-            destination === "new-topic"
-              ? "New topic created with notes, flashcards, and quiz."
-              : destination === "new-section"
-                ? `Added as "${source}" section with notes, flashcards, and quiz.`
-                : "Notes, flashcards, and quiz merged into topic.",
-        });
-      } else if (generated === -1) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        showToast({
-          type: "warning",
-          title: "You appear to be offline",
-          message: sourcePersistenceFailed
-            ? "The image was not saved to Course Brain Sources. Connect to the internet and check Course Brain before retrying."
-            : "Connect to the internet and tap an action button to try again.",
-        });
-      } else {
+        let sourcePersistenceFailed = false;
+        if (imageUri) {
+          setUploadingLabel("Saving source to Course Brain...");
+          try {
+            await persistImageSourceOnce(
+              captureId,
+              targetTopicId,
+              source,
+              text,
+              uploadedImage?.mimeType || mimeType,
+              uploadedImage?.id,
+            );
+          } catch (error) {
+            sourcePersistenceFailed = true;
+            console.warn(
+              "[TopicScreen] Image SourceLock persistence failed:",
+              error,
+            );
+          }
+        }
+
+        const sectionLabel = destination === "new-section" ? source : undefined;
+        const generated = await generateStudyMaterials(
+          text,
+          targetTopicId,
+          sectionLabel,
+        );
+        if (generated > 0 && originalImageUploadFailed) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          showToast({
+            type: "warning",
+            title: sourcePersistenceFailed
+              ? "Original image and source not saved"
+              : "Original image not preserved",
+            message: sourcePersistenceFailed
+              ? "Study materials were generated, but the original image was not preserved and the OCR source could not be saved."
+              : "Study materials were generated and OCR text was saved to Course Brain, but the original image was not preserved.",
+          });
+        } else if (generated > 0 && sourcePersistenceFailed) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          showToast({
+            type: "warning",
+            title: "Course Brain source not saved",
+            message:
+              "Study materials were generated, but we could not confirm the image was added to Sources. Check Course Brain before retrying.",
+          });
+        } else if (generated > 0) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          showToast({
+            type: "success",
+            title: "Study materials created!",
+            message:
+              destination === "new-topic"
+                ? "New topic created with notes, flashcards, and quiz."
+                : destination === "new-section"
+                  ? `Added as "${source}" section with notes, flashcards, and quiz.`
+                  : "Notes, flashcards, and quiz merged into topic.",
+          });
+        } else if (generated === -1) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          showToast({
+            type: "warning",
+            title: "You appear to be offline",
+            message: originalImageUploadFailed
+              ? "The original image was not preserved. Connect to the internet and check Course Brain before retrying."
+              : sourcePersistenceFailed
+                ? "The image was not saved to Course Brain Sources. Connect to the internet and check Course Brain before retrying."
+                : "Connect to the internet and tap an action button to try again.",
+          });
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          showToast({
+            type: "error",
+            title: "AI unavailable",
+            message: originalImageUploadFailed
+              ? "Could not generate study materials, and the original image was not preserved."
+              : sourcePersistenceFailed
+                ? "Could not generate study materials, and the image was not saved to Course Brain Sources."
+                : "Could not generate study materials. Please try again.",
+          });
+        }
+        loadData();
+      } catch (error: any) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         showToast({
           type: "error",
-          title: "AI unavailable",
-          message: sourcePersistenceFailed
-            ? "Could not generate study materials, and the image was not saved to Course Brain Sources."
-            : "Could not generate study materials. Please try again.",
+          title: "Error",
+          message: error?.message || "Failed to generate study materials.",
         });
+      } finally {
+        setIsUploading(false);
       }
-      loadData();
-    } catch (error: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ type: "error", title: "Error", message: error?.message || "Failed to generate study materials." });
     } finally {
-      setIsUploading(false);
+      destinationSelectInFlight.current = false;
     }
   };
 
@@ -579,15 +730,22 @@ export default function TopicScreen() {
     const compressedUri = await compressImage(uri);
     const imageBase64 = await readFileAsBase64(compressedUri);
     const authHeaders = await getAuthHeaders();
-    const response = await fetch(new URL("/api/ai/ocr/extract", getApiUrl()).toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      credentials: "include",
-      body: JSON.stringify({ imageBase64 }),
-    });
+    const response = await fetch(
+      new URL("/api/ai/ocr/extract", getApiUrl()).toString(),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        credentials: "include",
+        body: JSON.stringify({ imageBase64 }),
+      },
+    );
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(typeof errData.error === "string" ? errData.error : "OCR extraction failed");
+      throw new Error(
+        typeof errData.error === "string"
+          ? errData.error
+          : "OCR extraction failed",
+      );
     }
     const data = await response.json();
     return data.text || "";
@@ -595,11 +753,18 @@ export default function TopicScreen() {
 
   const handlePickDocument = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: ["text/*", "application/pdf", "image/*"] });
-      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/*", "application/pdf", "image/*"],
+      });
+      if (result.canceled || !result.assets || result.assets.length === 0)
+        return;
       const asset = result.assets[0];
       if (asset.size && asset.size > 40 * 1024 * 1024) {
-        showToast({ type: "warning", title: "File Too Large", message: "Please choose a file under 40 MB." });
+        showToast({
+          type: "warning",
+          title: "File Too Large",
+          message: "Please choose a file under 40 MB.",
+        });
         return;
       }
 
@@ -618,10 +783,19 @@ export default function TopicScreen() {
           if (ocrText.trim().length >= 20) {
             showDestinationPicker("Upload", ocrText, asset.uri, asset.mimeType);
           } else {
-            showToast({ type: "warning", title: "Not Enough Text", message: "Could not extract enough text from the image. Try a clearer photo." });
+            showToast({
+              type: "warning",
+              title: "Not Enough Text",
+              message:
+                "Could not extract enough text from the image. Try a clearer photo.",
+            });
           }
         } catch {
-          showToast({ type: "error", title: "Could Not Read Image", message: "Make sure the text is clearly visible and try again." });
+          showToast({
+            type: "error",
+            title: "Could Not Read Image",
+            message: "Make sure the text is clearly visible and try again.",
+          });
         } finally {
           setIsUploading(false);
         }
@@ -629,15 +803,22 @@ export default function TopicScreen() {
       } else {
         const fileBase64 = await readFileAsBase64(asset.uri);
         const authHeaders = await getAuthHeaders();
-        const response = await fetch(new URL("/api/ai/ocr/extract", getApiUrl()).toString(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders },
-          credentials: "include",
-          body: JSON.stringify({ imageBase64: fileBase64, fileType: "pdf" }),
-        });
+        const response = await fetch(
+          new URL("/api/ai/ocr/extract", getApiUrl()).toString(),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            credentials: "include",
+            body: JSON.stringify({ imageBase64: fileBase64, fileType: "pdf" }),
+          },
+        );
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          throw new Error(typeof errData.error === "string" ? errData.error : "Document extraction failed");
+          throw new Error(
+            typeof errData.error === "string"
+              ? errData.error
+              : "Document extraction failed",
+          );
         }
         const data = await response.json();
         extractedText = data.text || "";
@@ -646,11 +827,19 @@ export default function TopicScreen() {
       if (extractedText.trim()) {
         showDestinationPicker(fileName, extractedText);
       } else {
-        showToast({ type: "warning", title: "No Text Found", message: "Could not extract text from the document." });
+        showToast({
+          type: "warning",
+          title: "No Text Found",
+          message: "Could not extract text from the document.",
+        });
       }
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({ type: "error", title: "Error", message: error?.message || "Failed to process document." });
+      showToast({
+        type: "error",
+        title: "Error",
+        message: error?.message || "Failed to process document.",
+      });
       setIsUploading(false);
     }
   };
@@ -669,24 +858,63 @@ export default function TopicScreen() {
   };
 
   const contentActions = [
-    { key: "record", icon: "mic" as const, label: "Record", color: theme.error, onPress: handleRecord },
-    { key: "camera", icon: "camera" as const, label: "Camera", color: theme.link, onPress: handleTakePhoto },
-    { key: "gallery", icon: "image" as const, label: "Gallery", color: "#8B5CF6", onPress: handlePickGallery },
-    { key: "file", icon: "upload" as const, label: "Upload", color: theme.success, onPress: handlePickDocument },
-    { key: "clipboard", icon: "clipboard" as const, label: "Clipboard", color: theme.warning, onPress: handlePasteClipboard },
+    {
+      key: "record",
+      icon: "mic" as const,
+      label: "Record",
+      color: theme.error,
+      onPress: handleRecord,
+    },
+    {
+      key: "camera",
+      icon: "camera" as const,
+      label: "Camera",
+      color: theme.link,
+      onPress: handleTakePhoto,
+    },
+    {
+      key: "gallery",
+      icon: "image" as const,
+      label: "Gallery",
+      color: "#8B5CF6",
+      onPress: handlePickGallery,
+    },
+    {
+      key: "file",
+      icon: "upload" as const,
+      label: "Upload",
+      color: theme.success,
+      onPress: handlePickDocument,
+    },
+    {
+      key: "clipboard",
+      icon: "clipboard" as const,
+      label: "Clipboard",
+      color: theme.warning,
+      onPress: handlePasteClipboard,
+    },
   ];
-
 
   const renderTabContent = () => {
     switch (activeTab) {
       case "notes":
         return (
-          <ScrollView contentContainerStyle={{ paddingHorizontal: Spacing.lg, paddingBottom: insets.bottom + Spacing["4xl"] }}>
+          <ScrollView
+            contentContainerStyle={{
+              paddingHorizontal: Spacing.lg,
+              paddingBottom: insets.bottom + Spacing["4xl"],
+            }}
+          >
             <NotesTab
               notes={topicNotes}
               isGenerating={false}
               onGenerate={() => {
-                showToast({ type: "info", title: "Upload content", message: "Use the actions above to add study material and generate notes." });
+                showToast({
+                  type: "info",
+                  title: "Upload content",
+                  message:
+                    "Use the actions above to add study material and generate notes.",
+                });
               }}
               onSaveNotes={async (updatedNotes) => {
                 try {
@@ -696,14 +924,27 @@ export default function TopicScreen() {
                     favorite: updatedNotes.favorite,
                   });
                   if (!saved) {
-                    showToast({ type: "error", title: "Error", message: "Notes not found. Try regenerating." });
+                    showToast({
+                      type: "error",
+                      title: "Error",
+                      message: "Notes not found. Try regenerating.",
+                    });
                     return;
                   }
                   setTopicNotes(saved);
-                  showToast({ type: "success", title: "Saved", message: "Notes updated successfully." });
+                  showToast({
+                    type: "success",
+                    title: "Saved",
+                    message: "Notes updated successfully.",
+                  });
                 } catch (e) {
-                  if (__DEV__) console.log("[TopicScreen] Failed to save notes:", e);
-                  showToast({ type: "error", title: "Error", message: "Failed to save notes." });
+                  if (__DEV__)
+                    console.log("[TopicScreen] Failed to save notes:", e);
+                  showToast({
+                    type: "error",
+                    title: "Error",
+                    message: "Failed to save notes.",
+                  });
                 }
               }}
               onSendToWritingLab={(text, noteId) => {
@@ -738,7 +979,12 @@ export default function TopicScreen() {
                   : undefined
               }
               onGenerate={() => {
-                showToast({ type: "info", title: "Upload content", message: "Use the actions above to add study material and generate flashcards." });
+                showToast({
+                  type: "info",
+                  title: "Upload content",
+                  message:
+                    "Use the actions above to add study material and generate flashcards.",
+                });
               }}
             />
           </View>
@@ -760,7 +1006,12 @@ export default function TopicScreen() {
                   : undefined
               }
               onGenerate={() => {
-                showToast({ type: "info", title: "Upload content", message: "Use the actions above to add study material and generate a quiz." });
+                showToast({
+                  type: "info",
+                  title: "Upload content",
+                  message:
+                    "Use the actions above to add study material and generate a quiz.",
+                });
               }}
             />
           </View>
@@ -806,61 +1057,110 @@ export default function TopicScreen() {
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
         stickyHeaderIndices={[1]}
-        contentContainerStyle={{ paddingTop: headerHeight + Spacing.md, paddingBottom: 0, flexGrow: 1 }}
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.md,
+          paddingBottom: 0,
+          flexGrow: 1,
+        }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >
-        <View style={[styles.quickActionsSection, { paddingHorizontal: Spacing.lg }]}>
-          <ThemedText type="caption" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+        <View
+          style={[
+            styles.quickActionsSection,
+            { paddingHorizontal: Spacing.lg },
+          ]}
+        >
+          <ThemedText
+            type="caption"
+            style={[styles.sectionLabel, { color: theme.textSecondary }]}
+          >
             Add Content
           </ThemedText>
           <View style={styles.quickActionsRow}>
             {contentActions.map((action) => (
               <TouchableOpacity
                 key={action.key}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); action.onPress(); }}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  action.onPress();
+                }}
                 disabled={isUploading}
-                style={[styles.quickActionItem, isUploading && { opacity: 0.45 }]}
+                style={[
+                  styles.quickActionItem,
+                  isUploading && { opacity: 0.45 },
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel={action.label}
                 testID={`button-topic-${action.key}`}
               >
-                <View style={[styles.quickActionIconCircle, { backgroundColor: action.color }]}>
+                <View
+                  style={[
+                    styles.quickActionIconCircle,
+                    { backgroundColor: action.color },
+                  ]}
+                >
                   <Icon name={action.icon} size={20} color="#fff" />
                 </View>
-                <ThemedText type="caption" style={[styles.quickActionLabel, { color: theme.textSecondary }]} numberOfLines={1}>
+                <ThemedText
+                  type="caption"
+                  style={[
+                    styles.quickActionLabel,
+                    { color: theme.textSecondary },
+                  ]}
+                  numberOfLines={1}
+                >
                   {action.label}
                 </ThemedText>
               </TouchableOpacity>
             ))}
           </View>
 
-
           {isUploading ? (
-            <View style={[styles.uploadingBanner, { backgroundColor: theme.link + "15" }]}>
+            <View
+              style={[
+                styles.uploadingBanner,
+                { backgroundColor: theme.link + "15" },
+              ]}
+            >
               <ActivityIndicator size="small" color={theme.link} />
-              <ThemedText type="small" style={{ color: theme.link, marginLeft: Spacing.sm }}>
+              <ThemedText
+                type="small"
+                style={{ color: theme.link, marginLeft: Spacing.sm }}
+              >
                 {uploadingLabel}
               </ThemedText>
             </View>
           ) : null}
         </View>
 
-        <View style={[styles.tabBarSticky, { backgroundColor: theme.backgroundRoot, paddingHorizontal: Spacing.lg }]}>
+        <View
+          style={[
+            styles.tabBarSticky,
+            {
+              backgroundColor: theme.backgroundRoot,
+              paddingHorizontal: Spacing.lg,
+            },
+          ]}
+        >
           <TabBar
             tabs={CONTENT_TABS}
             activeTab={activeTab}
-            onTabChange={(key) => { setActiveTab(key); Haptics.selectionAsync(); }}
+            onTabChange={(key) => {
+              setActiveTab(key);
+              Haptics.selectionAsync();
+            }}
           />
         </View>
 
-        <View style={styles.contentContainer}>
-          {renderTabContent()}
-        </View>
+        <View style={styles.contentContainer}>{renderTabContent()}</View>
       </ScrollView>
 
       <BottomSheet
         visible={showPasteSheet}
-        onClose={() => { setShowPasteSheet(false); setPasteText(""); }}
+        onClose={() => {
+          setShowPasteSheet(false);
+          setPasteText("");
+        }}
         title="Paste Text"
       >
         <ThemedText

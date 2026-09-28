@@ -23,6 +23,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
+import { v4 as uuidv4 } from "uuid";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ListItem } from "@/components/ListItem";
@@ -41,8 +42,17 @@ import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { storage } from "@/lib/storage";
-import { createTopicWithServerSync, syncTopicToServer, ensureCourseOnServer } from "@/lib/serverSync";
-import { createImageSource, type CreatedSource } from "@/lib/sourceLock";
+import {
+  createTopicWithServerSync,
+  syncTopicToServer,
+  ensureCourseOnServer,
+} from "@/lib/serverSync";
+import {
+  createImageSource,
+  uploadWhiteboardImage,
+  type CreatedSource,
+  type UploadedWhiteboardImage,
+} from "@/lib/sourceLock";
 import { getApiUrl, getAuthHeaders } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import type {
@@ -89,11 +99,15 @@ export default function CourseScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingLabel, setUploadingLabel] = useState("Processing...");
   const [showDeleteTopicSheet, setShowDeleteTopicSheet] = useState(false);
-  const [deleteTopicTarget, setDeleteTopicTarget] = useState<Topic | null>(null);
+  const [deleteTopicTarget, setDeleteTopicTarget] = useState<Topic | null>(
+    null,
+  );
   const [showRenameCourseSheet, setShowRenameCourseSheet] = useState(false);
   const [renameCourseNameInput, setRenameCourseNameInput] = useState("");
   const [showRenameTopicSheet, setShowRenameTopicSheet] = useState(false);
-  const [renameTopicTarget, setRenameTopicTarget] = useState<Topic | null>(null);
+  const [renameTopicTarget, setRenameTopicTarget] = useState<Topic | null>(
+    null,
+  );
   const [renameTopicNameInput, setRenameTopicNameInput] = useState("");
   const [showDestinationSheet, setShowDestinationSheet] = useState(false);
   const [pendingContent, setPendingContent] = useState<{
@@ -102,9 +116,14 @@ export default function CourseScreen() {
     imageUri?: string;
     mimeType?: string;
     captureId: number;
+    uploadId?: string;
   } | null>(null);
   const captureSequence = useRef(0);
   const imageSourceRequests = useRef(new Map<number, Promise<CreatedSource>>());
+  const originalImageUploadRequests = useRef(
+    new Map<number, Promise<UploadedWhiteboardImage>>(),
+  );
+  const destinationSelectInFlight = useRef(false);
 
   const [allNotes, setAllNotes] = useState<Notes[]>([]);
   const [allFlashcards, setAllFlashcards] = useState<Flashcard[]>([]);
@@ -116,11 +135,12 @@ export default function CourseScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [loadedCourse, loadedTopics, loadedQuizAttempts] = await Promise.all([
-        storage.getCourse(courseId),
-        storage.getTopicsByCourse(courseId),
-        storage.getQuizAttemptsByCourse(courseId),
-      ]);
+      const [loadedCourse, loadedTopics, loadedQuizAttempts] =
+        await Promise.all([
+          storage.getCourse(courseId),
+          storage.getTopicsByCourse(courseId),
+          storage.getQuizAttemptsByCourse(courseId),
+        ]);
       setCourse(loadedCourse);
       setTopics(loadedTopics);
       setQuizAttempts(loadedQuizAttempts);
@@ -391,10 +411,11 @@ export default function CourseScreen() {
     text: string,
     topicId: string,
     sectionLabel?: string,
-  ) => {
-    if (!text || text.trim().length < 20) return;
+  ): Promise<{ generated: boolean }> => {
+    if (!text || text.trim().length < 20) return { generated: false };
     const authHeaders = await getAuthHeaders();
     setUploadingLabel("Generating study materials...");
+    let generated = false;
 
     try {
       const [notesRes, flashcardsRes, quizRes] = await Promise.allSettled([
@@ -424,20 +445,23 @@ export default function CourseScreen() {
           const summaryBullets = data.summary
             .split(/\n+/)
             .filter((line: string) => line.trim());
-          const timestamp = new Date().toLocaleString("en-US", {
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          });
-          const heading = sectionLabel
-            ? `${sectionLabel} (${timestamp})`
-            : `Notes (${timestamp})`;
-          await storage.saveNotes({
-            topicId,
-            title: "Study Notes",
-            sections: [{ heading, bullets: summaryBullets }],
-          });
+          if (summaryBullets.length > 0) {
+            const timestamp = new Date().toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            });
+            const heading = sectionLabel
+              ? `${sectionLabel} (${timestamp})`
+              : `Notes (${timestamp})`;
+            await storage.saveNotes({
+              topicId,
+              title: "Study Notes",
+              sections: [{ heading, bullets: summaryBullets }],
+            });
+            generated = true;
+          }
         }
       }
 
@@ -453,6 +477,7 @@ export default function CourseScreen() {
               sourceQuote: c.quote,
             })),
           );
+          generated = true;
         }
       }
 
@@ -468,13 +493,22 @@ export default function CourseScreen() {
                 typeof q.correctAnswer === "number" ? q.correctAnswer : 0,
             })),
           );
+          generated = true;
         }
       }
-      await storage.updateTopic(topicId, { status: "completed" });
-      if (__DEV__) console.log("[CourseScreen] Topic status -> completed after generateStudyMaterials");
+
+      if (generated) {
+        await storage.updateTopic(topicId, { status: "completed" });
+        if (__DEV__)
+          console.log(
+            "[CourseScreen] Topic status -> completed after generateStudyMaterials",
+          );
+      }
     } catch (err) {
       console.log("Study material generation partial failure:", err);
     }
+
+    return { generated };
   };
 
   const createNewTopicForContent = async (
@@ -526,6 +560,7 @@ export default function CourseScreen() {
     source: string,
     text: string,
     mimeType?: string,
+    whiteboardImageId?: string,
   ): Promise<CreatedSource> => {
     const existing = imageSourceRequests.current.get(captureId);
     if (existing) return existing;
@@ -536,6 +571,7 @@ export default function CourseScreen() {
       title: `${source} image`,
       extractedText: text,
       mimeType,
+      whiteboardImageId,
     }).catch((error) => {
       imageSourceRequests.current.delete(captureId);
       throw error;
@@ -545,89 +581,157 @@ export default function CourseScreen() {
   };
 
   const handleDestinationSelect = async (destination: ContentDestination) => {
-    setShowDestinationSheet(false);
-    if (!pendingContent) return;
-
-    const { text, source, imageUri, mimeType, captureId } = pendingContent;
-    setPendingContent(null);
-
-    setIsUploading(true);
-    setUploadingLabel("Generating study materials...");
+    if (destinationSelectInFlight.current) return;
+    destinationSelectInFlight.current = true;
 
     try {
-      let targetTopicId: string | null = null;
+      setShowDestinationSheet(false);
+      if (!pendingContent) return;
 
-      if (destination === "new-topic") {
-        targetTopicId = await createNewTopicForContent(source);
-        if (!targetTopicId) {
+      const { text, source, imageUri, mimeType, captureId, uploadId } =
+        pendingContent;
+      setPendingContent(null);
+
+      setIsUploading(true);
+      setUploadingLabel("Generating study materials...");
+
+      try {
+        let targetTopicId: string | null = null;
+
+        if (destination === "new-topic") {
+          targetTopicId = await createNewTopicForContent(source);
+          if (!targetTopicId) {
+            showToast({
+              type: "error",
+              title: "Error",
+              message: "Could not create a new topic.",
+            });
+            return;
+          }
+        } else {
+          targetTopicId = await ensureTopicForCourse();
+          if (!targetTopicId) return;
+        }
+
+        await storage.saveWhiteboardImage({
+          topicId: targetTopicId,
+          imagePath: imageUri || "",
+          ocrText: text,
+        });
+
+        let uploadedImage: UploadedWhiteboardImage | null = null;
+        let originalImageUploadFailed = false;
+        if (imageUri && uploadId) {
+          setUploadingLabel("Preserving original image...");
+          try {
+            const existingUpload =
+              originalImageUploadRequests.current.get(captureId);
+            const upload =
+              existingUpload ??
+              uploadWhiteboardImage({
+                courseId,
+                topicId: targetTopicId,
+                imageUri,
+                uploadId,
+                ocrText: text,
+                mimeType,
+              });
+            if (!existingUpload) {
+              originalImageUploadRequests.current.set(captureId, upload);
+            }
+            uploadedImage = await upload;
+          } catch (error) {
+            originalImageUploadFailed = true;
+            console.warn("[CourseScreen] Original image upload failed:", error);
+          }
+        }
+
+        let sourcePersistenceFailed = false;
+        if (imageUri) {
+          setUploadingLabel("Saving source to Course Brain...");
+          try {
+            await persistImageSourceOnce(
+              captureId,
+              targetTopicId,
+              source,
+              text,
+              uploadedImage?.mimeType || mimeType,
+              uploadedImage?.id,
+            );
+          } catch (error) {
+            sourcePersistenceFailed = true;
+            console.warn(
+              "[CourseScreen] Image SourceLock persistence failed:",
+              error,
+            );
+          }
+        }
+
+        const sectionLabel = destination === "new-section" ? source : undefined;
+        const { generated } = await generateStudyMaterials(
+          text,
+          targetTopicId,
+          sectionLabel,
+        );
+        Haptics.notificationAsync(
+          generated
+            ? Haptics.NotificationFeedbackType.Success
+            : Haptics.NotificationFeedbackType.Warning,
+        );
+        if (originalImageUploadFailed) {
           showToast({
-            type: "error",
-            title: "Error",
-            message: "Could not create a new topic.",
+            type: "warning",
+            title: sourcePersistenceFailed
+              ? "Original image and source not saved"
+              : "Original image not preserved",
+            message: sourcePersistenceFailed
+              ? generated
+                ? "The original image was not preserved, and the OCR source could not be saved. Study materials were generated."
+                : "The original image was not preserved, and the OCR source could not be saved. Study-material generation could not be confirmed."
+              : generated
+                ? "The original image was not preserved. Study materials were generated."
+                : "The original image was not preserved. Study-material generation could not be confirmed.",
           });
-          return;
+        } else if (sourcePersistenceFailed) {
+          showToast({
+            type: "warning",
+            title: "Course Brain source not saved",
+            message: generated
+              ? "Study materials were generated, but we could not confirm the image was added to Sources. Check Course Brain before retrying."
+              : "We could not confirm the image was added to Sources or that study materials were generated. Check Course Brain before retrying.",
+          });
+        } else if (!generated) {
+          showToast({
+            type: "warning",
+            title: "Study materials not confirmed",
+            message:
+              "We could not confirm that any study materials were generated. Please try again.",
+          });
+        } else {
+          showToast({
+            type: "success",
+            title: "Study materials created",
+            message:
+              destination === "new-topic"
+                ? "New topic created with generated study materials."
+                : destination === "new-section"
+                  ? `Added generated study materials for the "${source}" section.`
+                  : "Generated study materials merged into topic.",
+          });
         }
-      } else {
-        targetTopicId = await ensureTopicForCourse();
-        if (!targetTopicId) return;
-      }
-
-      await storage.saveWhiteboardImage({
-        topicId: targetTopicId,
-        imagePath: imageUri || "",
-        ocrText: text,
-      });
-
-      let sourcePersistenceFailed = false;
-      if (imageUri) {
-        setUploadingLabel("Saving source to Course Brain...");
-        try {
-          await persistImageSourceOnce(
-            captureId,
-            targetTopicId,
-            source,
-            text,
-            mimeType,
-          );
-        } catch (error) {
-          sourcePersistenceFailed = true;
-          console.warn("[CourseScreen] Image SourceLock persistence failed:", error);
-        }
-      }
-
-      const sectionLabel =
-        destination === "new-section" ? source : undefined;
-      await generateStudyMaterials(text, targetTopicId, sectionLabel);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (sourcePersistenceFailed) {
+        loadData();
+      } catch (error: any) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         showToast({
-          type: "warning",
-          title: "Course Brain source not saved",
-          message:
-            "Study materials were generated, but we could not confirm the image was added to Sources. Check Course Brain before retrying.",
+          type: "error",
+          title: "Error",
+          message: error?.message || "Failed to generate study materials.",
         });
-      } else {
-        showToast({
-          type: "success",
-          title: "Study materials created!",
-          message:
-            destination === "new-topic"
-              ? "New topic created with notes, flashcards, and quiz."
-              : destination === "new-section"
-                ? `Added as "${source}" section with notes, flashcards, and quiz.`
-                : "Notes, flashcards, and quiz merged into topic.",
-        });
+      } finally {
+        setIsUploading(false);
       }
-      loadData();
-    } catch (error: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showToast({
-        type: "error",
-        title: "Error",
-        message: error?.message || "Failed to generate study materials.",
-      });
     } finally {
-      setIsUploading(false);
+      destinationSelectInFlight.current = false;
     }
   };
 
@@ -644,6 +748,7 @@ export default function CourseScreen() {
       imageUri,
       mimeType,
       captureId: captureSequence.current,
+      uploadId: imageUri ? uuidv4() : undefined,
     });
     setShowDestinationSheet(true);
   };
@@ -849,7 +954,11 @@ export default function CourseScreen() {
     if (updated) {
       setCourse(updated);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast({ type: "success", title: "Renamed", message: "Course updated" });
+      showToast({
+        type: "success",
+        title: "Renamed",
+        message: "Course updated",
+      });
       const token = await getAuthToken();
       ensureCourseOnServer(updated.id, token).catch((err) =>
         console.warn("[Rename] Failed to sync course name to server:", err),
@@ -867,10 +976,16 @@ export default function CourseScreen() {
   const handleRenameTopic = async () => {
     const trimmed = renameTopicNameInput.trim();
     if (!trimmed || !renameTopicTarget) return;
-    const updated = await storage.updateTopic(renameTopicTarget.id, { name: trimmed });
+    const updated = await storage.updateTopic(renameTopicTarget.id, {
+      name: trimmed,
+    });
     if (updated) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast({ type: "success", title: "Renamed", message: "Topic updated" });
+      showToast({
+        type: "success",
+        title: "Renamed",
+        message: "Topic updated",
+      });
       const token = await getAuthToken();
       syncTopicToServer(
         { id: updated.id, name: updated.name, courseId: updated.courseId },
@@ -935,14 +1050,19 @@ export default function CourseScreen() {
         }
       : null;
 
-  const completedTopicsCount = topics.filter((t) => t.status === "completed").length;
+  const completedTopicsCount = topics.filter(
+    (t) => t.status === "completed",
+  ).length;
   const passedTopicIds = new Set(
     quizAttempts.filter((a) => a.passed).map((a) => a.topicId),
   );
   const quizAccuracy =
     quizAttempts.length > 0
       ? Math.round(
-          (quizAttempts.reduce((sum, a) => sum + a.score / a.totalQuestions, 0) /
+          (quizAttempts.reduce(
+            (sum, a) => sum + a.score / a.totalQuestions,
+            0,
+          ) /
             quizAttempts.length) *
             100,
         )
@@ -954,7 +1074,10 @@ export default function CourseScreen() {
       <View
         style={[
           styles.progressCard,
-          { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+          },
         ]}
       >
         <View style={styles.progressStat}>
@@ -965,7 +1088,9 @@ export default function CourseScreen() {
             Topics done
           </ThemedText>
         </View>
-        <View style={[styles.progressDivider, { backgroundColor: theme.border }]} />
+        <View
+          style={[styles.progressDivider, { backgroundColor: theme.border }]}
+        />
         <View style={styles.progressStat}>
           <ThemedText type="h3" style={{ color: theme.text }}>
             {quizAccuracy !== null ? `${quizAccuracy}%` : "—"}
@@ -974,7 +1099,9 @@ export default function CourseScreen() {
             Quiz accuracy
           </ThemedText>
         </View>
-        <View style={[styles.progressDivider, { backgroundColor: theme.border }]} />
+        <View
+          style={[styles.progressDivider, { backgroundColor: theme.border }]}
+        />
         <View style={styles.progressStat}>
           <ThemedText type="h3" style={{ color: theme.text }}>
             {passedTopicIds.size}
@@ -1024,7 +1151,6 @@ export default function CourseScreen() {
       testID: "button-course-clipboard",
     },
   ];
-
 
   const renderTopic = ({ item }: { item: Topic }) => (
     <View style={styles.topicRow}>
@@ -1148,15 +1274,16 @@ export default function CourseScreen() {
                 showToast({
                   type: "info",
                   title: "Generate from topics",
-                  message:
-                    "Open a topic to generate notes from its content.",
+                  message: "Open a topic to generate notes from its content.",
                 });
               }}
               onSaveNotes={async (updatedNotes) => {
                 try {
                   const grouped: Record<string, NotesSection[]> = {};
                   updatedNotes.sections.forEach((section, i) => {
-                    const tid = sectionTopicMap[i] || allNotes[allNotes.length - 1]?.topicId;
+                    const tid =
+                      sectionTopicMap[i] ||
+                      allNotes[allNotes.length - 1]?.topicId;
                     if (!tid) return;
                     if (!grouped[tid]) grouped[tid] = [];
                     grouped[tid].push(section);
@@ -1168,13 +1295,26 @@ export default function CourseScreen() {
                   }
                   loadData();
                   if (anyFailed) {
-                    showToast({ type: "warning", title: "Partial save", message: "Some notes could not be found." });
+                    showToast({
+                      type: "warning",
+                      title: "Partial save",
+                      message: "Some notes could not be found.",
+                    });
                   } else {
-                    showToast({ type: "success", title: "Saved", message: "Notes updated successfully." });
+                    showToast({
+                      type: "success",
+                      title: "Saved",
+                      message: "Notes updated successfully.",
+                    });
                   }
                 } catch (e) {
-                  if (__DEV__) console.log("[CourseScreen] Failed to save notes:", e);
-                  showToast({ type: "error", title: "Error", message: "Failed to save notes." });
+                  if (__DEV__)
+                    console.log("[CourseScreen] Failed to save notes:", e);
+                  showToast({
+                    type: "error",
+                    title: "Error",
+                    message: "Failed to save notes.",
+                  });
                 }
               }}
             />
@@ -1241,9 +1381,13 @@ export default function CourseScreen() {
           },
         ]}
       >
-        <View style={{ paddingHorizontal: Spacing.lg }}>{renderProgressCard()}</View>
+        <View style={{ paddingHorizontal: Spacing.lg }}>
+          {renderProgressCard()}
+        </View>
 
-        <View style={{ paddingHorizontal: Spacing.lg, marginBottom: Spacing.md }}>
+        <View
+          style={{ paddingHorizontal: Spacing.lg, marginBottom: Spacing.md }}
+        >
           <Button
             variant="secondary"
             fullWidth
@@ -1256,10 +1400,18 @@ export default function CourseScreen() {
           </Button>
         </View>
 
-        <View style={[styles.quickActionsContainer, { paddingHorizontal: Spacing.lg }]}>
+        <View
+          style={[
+            styles.quickActionsContainer,
+            { paddingHorizontal: Spacing.lg },
+          ]}
+        >
           <ThemedText
             type="caption"
-            style={[styles.quickActionsSectionLabel, { color: theme.textSecondary }]}
+            style={[
+              styles.quickActionsSectionLabel,
+              { color: theme.textSecondary },
+            ]}
           >
             Add Content
           </ThemedText>
@@ -1287,7 +1439,10 @@ export default function CourseScreen() {
                 </View>
                 <ThemedText
                   type="caption"
-                  style={[styles.quickActionLabel, { color: theme.textSecondary }]}
+                  style={[
+                    styles.quickActionLabel,
+                    { color: theme.textSecondary },
+                  ]}
                 >
                   {action.label}
                 </ThemedText>

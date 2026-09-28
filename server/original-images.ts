@@ -44,7 +44,9 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
       if (!data) return badRequest(res, "Invalid image upload");
       try {
         const result = await uploadOriginalImage({ userId: req.user!.id, courseId: params.data.courseId, topicId: params.data.topicId, uploadId: data.uploadId, ocrText: data.ocrText, bytes: data.file.buffer, mimeType: data.mimeType }, options);
-        return res.status(result.replay ? 200 : 201).json({ image: { id: result.image.id, topicId: result.image.topicId, filename: result.image.filename, ocrText: result.image.ocrText } });
+        return res.status(result.replay ? 200 : 201).json({
+          whiteboardImage: { id: result.image.id, mimeType: data.mimeType },
+        });
       } catch (uploadError) { return handleError(res, uploadError); }
     });
   });
