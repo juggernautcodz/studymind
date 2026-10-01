@@ -48,9 +48,21 @@ export type OwnedSourceOriginalImage = {
   mimeType: string;
 };
 
-// TEMPORARY: Remove after the single failing production source is diagnosed.
+// TEMPORARY: Remove after the failing production sources are diagnosed.
 const DIAGNOSTIC_COURSE_ID = "d6d406dc-2ba1-47af-a688-5f2b19d7c956";
-const DIAGNOSTIC_SOURCE_ID = "bb5f8838-6b6d-4fcb-a8d3-2ec3fa651a2";
+const DIAGNOSTIC_SOURCE_IDS = new Set([
+  "8ef18dbd-4ba7-40b6-a243-ca6d9c29bf92",
+  "4c3ae914-a8b4-402e-9f08-ae83aeab3b93",
+  "2c43cead-39bb-4e71-9512-43a84827c3d0",
+  "bb5f8838-6b6d-4fcb-a8d3-2ec3fa651a29",
+]);
+
+export function shouldLogTemporarySourceImageDiagnostic(
+  courseId: string | undefined,
+  sourceId: string | undefined,
+): boolean {
+  return courseId === DIAGNOSTIC_COURSE_ID && !!sourceId && DIAGNOSTIC_SOURCE_IDS.has(sourceId);
+}
 
 export type SourceImageDiagnosticReason =
   | "SOURCE_NOT_FOUND"
@@ -59,7 +71,9 @@ export type SourceImageDiagnosticReason =
   | "IMAGE_ROW_MISMATCH"
   | "OWNERSHIP_MISMATCH"
   | "STORAGE_OBJECT_MISSING"
-  | "LOOKUP_VALID";
+  | "LOOKUP_VALID"
+  | "STORAGE_EXISTS_FAILED"
+  | "STORAGE_DOWNLOAD_FAILED";
 
 export function logTemporarySourceImageDiagnostic(input: {
   courseId: string;
@@ -69,11 +83,11 @@ export function logTemporarySourceImageDiagnostic(input: {
   filepath?: string | null;
   mimeType?: string | null;
   storageExists?: boolean;
+  storageOperation?: string;
+  storageStatusCode?: number;
+  responseHeadersSent?: boolean;
 }): void {
-  if (
-    input.courseId !== DIAGNOSTIC_COURSE_ID ||
-    input.sourceId !== DIAGNOSTIC_SOURCE_ID
-  ) {
+  if (!shouldLogTemporarySourceImageDiagnostic(input.courseId, input.sourceId)) {
     return;
   }
 
@@ -84,6 +98,9 @@ export function logTemporarySourceImageDiagnostic(input: {
     filepath: input.filepath ?? undefined,
     mimeType: input.mimeType ?? undefined,
     storageExists: input.storageExists,
+    storageOperation: input.storageOperation,
+    storageStatusCode: input.storageStatusCode,
+    responseHeadersSent: input.responseHeadersSent,
     reason: input.reason,
   });
 }

@@ -3,8 +3,8 @@ import multer, { MulterError } from "multer";
 import { AppError, badRequest, internalError, sendError } from "./lib/errors";
 import { detectOriginalImageMimeType, ORIGINAL_IMAGE_MAX_BYTES, ORIGINAL_IMAGE_MAX_OCR_TEXT_LENGTH, originalImageUploadParams, uploadIdSchema } from "./lib/original-image-upload-validation";
 import { sourceDetailRouteParams } from "./lib/source-lock-validation";
-import { findOwnedSourceOriginalImage, logTemporarySourceImageDiagnostic, requireOwnedTopic, uploadOriginalImage, type OriginalImageUploadDatabase, type OriginalImageUploadDependencies } from "./original-image-upload-service";
-import type { OriginalImageStorage } from "./lib/original-image-storage";
+import { findOwnedSourceOriginalImage, logTemporarySourceImageDiagnostic, requireOwnedTopic, shouldLogTemporarySourceImageDiagnostic, uploadOriginalImage, type OriginalImageUploadDatabase, type OriginalImageUploadDependencies } from "./original-image-upload-service";
+import { OriginalImageStorageError, type OriginalImageStorage } from "./lib/original-image-storage";
 
 export interface AuthRequest extends Request { user?: { id: string; email: string } }
 type Middleware = (req: AuthRequest, res: Response, next: NextFunction) => unknown;
@@ -12,18 +12,12 @@ export interface OriginalImagesRouterOptions extends OriginalImageUploadDependen
 
 const multipart = multer({ storage: multer.memoryStorage(), limits: { fileSize: ORIGINAL_IMAGE_MAX_BYTES, files: 1, fields: 2 } }).fields([{ name: "image", maxCount: 1 }]);
 
-// TEMPORARY: Remove after the single failing production request path is diagnosed.
-const ROUTE_DIAGNOSTIC_COURSE_ID = "d6d406dc-2ba1-47af-a688-5f2b19d7c956";
-const ROUTE_DIAGNOSTIC_SOURCE_ID = "bb5f8838-6b6d-4fcb-a8d3-2ec3fa651a2";
-
 function logTemporaryRouteDiagnostic(
   params: { courseId?: string; sourceId?: string },
-  marker: "ROUTE_ENTERED" | "AUTH_PASSED" | "SERVICE_CALLED",
+  marker: "ROUTE_ENTERED" | "AUTH_PASSED" | "SERVICE_CALLED" | "FINAL_RESPONSE",
+  details: Record<string, unknown> = {},
 ): void {
-  if (
-    params.courseId !== ROUTE_DIAGNOSTIC_COURSE_ID ||
-    params.sourceId !== ROUTE_DIAGNOSTIC_SOURCE_ID
-  ) {
+  if (!shouldLogTemporarySourceImageDiagnostic(params.courseId, params.sourceId)) {
     return;
   }
 
@@ -31,7 +25,19 @@ function logTemporaryRouteDiagnostic(
     marker,
     courseId: params.courseId,
     sourceId: params.sourceId,
+    ...details,
   });
+}
+
+function storageDiagnosticDetails(error: unknown): Record<string, unknown> {
+  if (error instanceof OriginalImageStorageError) {
+    return {
+      storageOperation: error.operation,
+      storageStatusCode: error.statusCode,
+    };
+  }
+
+  return { storageOperation: "unknown" };
 }
 
 function safeMulterError(res: Response, error: unknown): void {
@@ -59,6 +65,11 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
   const requireOwned = options.requireOwned ?? ((userId, courseId, topicId) => requireOwnedTopic(db, userId, courseId, topicId));
   router.get("/courses/:courseId/sources/:sourceId/original-image", (req: Request, _res: Response, next: NextFunction) => {
     logTemporaryRouteDiagnostic(req.params, "ROUTE_ENTERED");
+    _res.on("finish", () => {
+      logTemporaryRouteDiagnostic(req.params, "FINAL_RESPONSE", {
+        statusCode: _res.statusCode,
+      });
+    });
     next();
   }, authenticate, (req: AuthRequest, _res: Response, next: NextFunction) => {
     logTemporaryRouteDiagnostic(req.params, "AUTH_PASSED");
@@ -79,7 +90,16 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
       let exists: boolean;
       try {
         exists = await storage.exists(image.filepath);
-      } catch {
+      } catch (error) {
+        logTemporarySourceImageDiagnostic({
+          courseId: params.data.courseId,
+          sourceId: params.data.sourceId,
+          whiteboardImageId: image.whiteboardImageId,
+          filepath: image.filepath,
+          mimeType: image.mimeType,
+          reason: "STORAGE_EXISTS_FAILED",
+          ...storageDiagnosticDetails(error),
+        });
         throw new AppError(
           503,
           "STORAGE_UNAVAILABLE",
@@ -116,7 +136,18 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
 
       try {
         await storage.pipeTo(image.filepath, res);
-      } catch {
+      } catch (error) {
+        logTemporarySourceImageDiagnostic({
+          courseId: params.data.courseId,
+          sourceId: params.data.sourceId,
+          whiteboardImageId: image.whiteboardImageId,
+          filepath: image.filepath,
+          mimeType: image.mimeType,
+          storageExists: true,
+          responseHeadersSent: res.headersSent,
+          reason: "STORAGE_DOWNLOAD_FAILED",
+          ...storageDiagnosticDetails(error),
+        });
         if (res.headersSent) {
           res.destroy();
           return;
