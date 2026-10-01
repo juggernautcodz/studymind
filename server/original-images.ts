@@ -14,7 +14,7 @@ const multipart = multer({ storage: multer.memoryStorage(), limits: { fileSize: 
 
 function logTemporaryRouteDiagnostic(
   params: { courseId?: string; sourceId?: string },
-  marker: "ROUTE_ENTERED" | "AUTH_PASSED" | "SERVICE_CALLED" | "FINAL_RESPONSE",
+  marker: "ROUTE_ENTERED" | "AUTH_PASSED" | "SERVICE_CALLED" | "STORAGE_EXISTS_FAILED" | "STORAGE_DOWNLOAD_FAILED" | "FINAL_RESPONSE",
   details: Record<string, unknown> = {},
 ): void {
   if (!shouldLogTemporarySourceImageDiagnostic(params.courseId, params.sourceId)) {
@@ -29,9 +29,40 @@ function logTemporaryRouteDiagnostic(
   });
 }
 
+function sanitizeStorageDiagnosticMessage(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+
+  return value
+    .replace(/\r?\n/g, " ")
+    .replace(/https?:\/\/\S+/gi, "[REDACTED_URL]")
+    .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 [REDACTED]")
+    .replace(
+      /\b(authorization|access[_-]?token|refresh[_-]?token|api[_-]?key|secret|password|credential)\s*[:=]\s*\S+/gi,
+      "$1=[REDACTED]",
+    )
+    .slice(0, 500);
+}
+
+function safeStorageDiagnosticCode(value: unknown): string | number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^[A-Za-z0-9_.:-]{1,80}$/.test(value)) return value;
+  return undefined;
+}
+
 function storageDiagnosticDetails(error: unknown): Record<string, unknown> {
   if (error instanceof OriginalImageStorageError) {
+    const cause = error.cause;
+    const causeRecord =
+      typeof cause === "object" && cause !== null
+        ? (cause as Record<string, unknown>)
+        : undefined;
+
     return {
+      errorName: error.name,
+      errorMessage: sanitizeStorageDiagnosticMessage(error.message),
+      causeName: sanitizeStorageDiagnosticMessage(causeRecord?.name),
+      causeMessage: sanitizeStorageDiagnosticMessage(causeRecord?.message),
+      causeCode: safeStorageDiagnosticCode(causeRecord?.code),
       storageOperation: error.operation,
       storageStatusCode: error.statusCode,
     };
@@ -91,6 +122,12 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
       try {
         exists = await storage.exists(image.filepath);
       } catch (error) {
+        const diagnosticDetails = storageDiagnosticDetails(error);
+        logTemporaryRouteDiagnostic(
+          params.data,
+          "STORAGE_EXISTS_FAILED",
+          diagnosticDetails,
+        );
         logTemporarySourceImageDiagnostic({
           courseId: params.data.courseId,
           sourceId: params.data.sourceId,
@@ -98,7 +135,7 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
           filepath: image.filepath,
           mimeType: image.mimeType,
           reason: "STORAGE_EXISTS_FAILED",
-          ...storageDiagnosticDetails(error),
+          ...diagnosticDetails,
         });
         throw new AppError(
           503,
@@ -137,6 +174,12 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
       try {
         await storage.pipeTo(image.filepath, res);
       } catch (error) {
+        const diagnosticDetails = storageDiagnosticDetails(error);
+        logTemporaryRouteDiagnostic(
+          params.data,
+          "STORAGE_DOWNLOAD_FAILED",
+          diagnosticDetails,
+        );
         logTemporarySourceImageDiagnostic({
           courseId: params.data.courseId,
           sourceId: params.data.sourceId,
@@ -146,7 +189,7 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
           storageExists: true,
           responseHeadersSent: res.headersSent,
           reason: "STORAGE_DOWNLOAD_FAILED",
-          ...storageDiagnosticDetails(error),
+          ...diagnosticDetails,
         });
         if (res.headersSent) {
           res.destroy();
