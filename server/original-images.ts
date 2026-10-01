@@ -12,6 +12,28 @@ export interface OriginalImagesRouterOptions extends OriginalImageUploadDependen
 
 const multipart = multer({ storage: multer.memoryStorage(), limits: { fileSize: ORIGINAL_IMAGE_MAX_BYTES, files: 1, fields: 2 } }).fields([{ name: "image", maxCount: 1 }]);
 
+// TEMPORARY: Remove after the single failing production request path is diagnosed.
+const ROUTE_DIAGNOSTIC_COURSE_ID = "d6d406dc-2ba1-47af-a688-5f2b19d7c956";
+const ROUTE_DIAGNOSTIC_SOURCE_ID = "bb5f8838-6b6d-4fcb-a8d3-2ec3fa651a2";
+
+function logTemporaryRouteDiagnostic(
+  params: { courseId?: string; sourceId?: string },
+  marker: "ROUTE_ENTERED" | "AUTH_PASSED" | "SERVICE_CALLED",
+): void {
+  if (
+    params.courseId !== ROUTE_DIAGNOSTIC_COURSE_ID ||
+    params.sourceId !== ROUTE_DIAGNOSTIC_SOURCE_ID
+  ) {
+    return;
+  }
+
+  console.log("[SourceImage route diagnostic]", {
+    marker,
+    courseId: params.courseId,
+    sourceId: params.sourceId,
+  });
+}
+
 function safeMulterError(res: Response, error: unknown): void {
   if (error instanceof MulterError && error.code === "LIMIT_FILE_SIZE") return sendError(res, 413, "PAYLOAD_TOO_LARGE", "Image exceeds the 20 MB limit");
   if (error instanceof MulterError) return badRequest(res, "Invalid multipart upload");
@@ -35,11 +57,18 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
   const router = Router();
   const { authenticate, db, storage } = options;
   const requireOwned = options.requireOwned ?? ((userId, courseId, topicId) => requireOwnedTopic(db, userId, courseId, topicId));
-  router.get("/courses/:courseId/sources/:sourceId/original-image", authenticate, async (req: AuthRequest, res: Response) => {
+  router.get("/courses/:courseId/sources/:sourceId/original-image", (req: Request, _res: Response, next: NextFunction) => {
+    logTemporaryRouteDiagnostic(req.params, "ROUTE_ENTERED");
+    next();
+  }, authenticate, (req: AuthRequest, _res: Response, next: NextFunction) => {
+    logTemporaryRouteDiagnostic(req.params, "AUTH_PASSED");
+    next();
+  }, async (req: AuthRequest, res: Response) => {
     const params = sourceDetailRouteParams.safeParse(req.params);
     if (!params.success) return badRequest(res, "Invalid route parameters");
 
     try {
+      logTemporaryRouteDiagnostic(params.data, "SERVICE_CALLED");
       const image = await findOwnedSourceOriginalImage(
         db,
         req.user!.id,
