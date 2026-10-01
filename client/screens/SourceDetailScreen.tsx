@@ -33,6 +33,23 @@ function formatDate(value: string) {
   return new Date(value).toLocaleDateString();
 }
 
+function safeImageErrorDiagnostic(error: string): string {
+  const status = error.match(
+    /\b(?:http(?:\s+status)?|status(?:\s+code)?)\D{0,8}(\d{3})\b/i,
+  )?.[1];
+  if (status) return `HTTP ${status}`;
+
+  const summary = error
+    .split(/\r?\n/, 1)[0]
+    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\b(?:https?|file):\/\/[^\s"'<>]+/gi, "[url]")
+    .replace(/\boriginal-images\/[^\s"'<>]+/gi, "[object-key]")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return summary.slice(0, 300) || "Image load failed";
+}
+
 export default function SourceDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "SourceDetail">>();
   const { courseId, sourceId } = route.params;
@@ -162,7 +179,11 @@ export default function SourceDetailScreen() {
                       contentFit="contain"
                       onLoadStart={() => setIsImageLoading(true)}
                       onLoadEnd={() => setIsImageLoading(false)}
-                      onError={() => {
+                      onError={({ error }) => {
+                        console.warn(
+                          "[SourceDetail image error]",
+                          safeImageErrorDiagnostic(error),
+                        );
                         setImageFailed(true);
                         setIsImageLoading(false);
                       }}
