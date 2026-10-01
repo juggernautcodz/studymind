@@ -120,3 +120,6 @@ EXPO_NO_PROMPT = "1"
 [userenv.production]
 PORT = "5000"
 NODE_ENV = "production"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-e4072d25-081c-4d0e-becd-ce3ddf2b5f31"
