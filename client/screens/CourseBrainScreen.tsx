@@ -70,7 +70,15 @@ export default function CourseBrainScreen() {
         ) : null}
 
         <SectionHeader title="Course overview" icon="book-open" />
-        <Card style={styles.card}>
+        <View
+          style={[
+            styles.overviewCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border + "40",
+            },
+          ]}
+        >
           <View style={styles.countGrid}>
             {countItems.map(([label, value]) => {
               const countContent = (
@@ -115,7 +123,7 @@ export default function CourseBrainScreen() {
               Updated {new Date(brain.lastActivityAt).toLocaleDateString()}
             </ThemedText>
           ) : null}
-        </Card>
+        </View>
 
         <SectionHeader title="Topics" icon="layers" />
         {brain.topics.length === 0 ? (
@@ -255,6 +263,12 @@ const styles = StyleSheet.create({
   errorContainer: { flex: 1, paddingTop: Spacing["4xl"] },
   content: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing["4xl"] },
   card: { marginBottom: Spacing.md },
+  overviewCard: {
+    marginBottom: Spacing.md,
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1,
+  },
   countGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
