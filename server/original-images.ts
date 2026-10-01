@@ -3,7 +3,7 @@ import multer, { MulterError } from "multer";
 import { AppError, badRequest, internalError, sendError } from "./lib/errors";
 import { detectOriginalImageMimeType, ORIGINAL_IMAGE_MAX_BYTES, ORIGINAL_IMAGE_MAX_OCR_TEXT_LENGTH, originalImageUploadParams, uploadIdSchema } from "./lib/original-image-upload-validation";
 import { sourceDetailRouteParams } from "./lib/source-lock-validation";
-import { findOwnedSourceOriginalImage, requireOwnedTopic, uploadOriginalImage, type OriginalImageUploadDatabase, type OriginalImageUploadDependencies } from "./original-image-upload-service";
+import { findOwnedSourceOriginalImage, logTemporarySourceImageDiagnostic, requireOwnedTopic, uploadOriginalImage, type OriginalImageUploadDatabase, type OriginalImageUploadDependencies } from "./original-image-upload-service";
 import type { OriginalImageStorage } from "./lib/original-image-storage";
 
 export interface AuthRequest extends Request { user?: { id: string; email: string } }
@@ -58,8 +58,27 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
         );
       }
       if (!exists) {
+        logTemporarySourceImageDiagnostic({
+          courseId: params.data.courseId,
+          sourceId: params.data.sourceId,
+          whiteboardImageId: image.whiteboardImageId,
+          filepath: image.filepath,
+          mimeType: image.mimeType,
+          storageExists: false,
+          reason: "STORAGE_OBJECT_MISSING",
+        });
         throw new AppError(404, "NOT_FOUND", "Original image not found");
       }
+
+      logTemporarySourceImageDiagnostic({
+        courseId: params.data.courseId,
+        sourceId: params.data.sourceId,
+        whiteboardImageId: image.whiteboardImageId,
+        filepath: image.filepath,
+        mimeType: image.mimeType,
+        storageExists: true,
+        reason: "LOOKUP_VALID",
+      });
 
       res.setHeader("Content-Type", image.mimeType);
       res.setHeader("Cache-Control", "private, no-store, max-age=0");

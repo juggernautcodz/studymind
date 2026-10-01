@@ -43,9 +43,50 @@ const ORIGINAL_IMAGE_MIME_TYPES = new Set([
 ]);
 
 export type OwnedSourceOriginalImage = {
+  whiteboardImageId: string;
   filepath: string;
   mimeType: string;
 };
+
+// TEMPORARY: Remove after the single failing production source is diagnosed.
+const DIAGNOSTIC_COURSE_ID = "d6d406dc-2ba1-47af-a688-5f2b19d7c956";
+const DIAGNOSTIC_SOURCE_ID = "bb5f8838-6b6d-4fcb-a8d3-2ec3fa651a2";
+
+export type SourceImageDiagnosticReason =
+  | "SOURCE_NOT_FOUND"
+  | "MISSING_IMAGE_LINK"
+  | "UNSUPPORTED_MIME"
+  | "IMAGE_ROW_MISMATCH"
+  | "OWNERSHIP_MISMATCH"
+  | "STORAGE_OBJECT_MISSING"
+  | "LOOKUP_VALID";
+
+export function logTemporarySourceImageDiagnostic(input: {
+  courseId: string;
+  sourceId: string;
+  reason: SourceImageDiagnosticReason;
+  whiteboardImageId?: string | null;
+  filepath?: string | null;
+  mimeType?: string | null;
+  storageExists?: boolean;
+}): void {
+  if (
+    input.courseId !== DIAGNOSTIC_COURSE_ID ||
+    input.sourceId !== DIAGNOSTIC_SOURCE_ID
+  ) {
+    return;
+  }
+
+  console.info("[SourceImage diagnostic]", {
+    courseId: input.courseId,
+    sourceId: input.sourceId,
+    whiteboardImageId: input.whiteboardImageId ?? undefined,
+    filepath: input.filepath ?? undefined,
+    mimeType: input.mimeType ?? undefined,
+    storageExists: input.storageExists,
+    reason: input.reason,
+  });
+}
 
 export async function findOwnedSourceOriginalImage(
   db: OriginalImageUploadDatabase,
@@ -76,24 +117,77 @@ export async function findOwnedSourceOriginalImage(
     },
   });
 
-  const image = source?.whiteboardImage;
+  if (!source) {
+    logTemporarySourceImageDiagnostic({
+      courseId,
+      sourceId,
+      reason: "SOURCE_NOT_FOUND",
+    });
+    throw new AppError(404, "NOT_FOUND", "Original image not found");
+  }
+  if (!source.topicId || !source.whiteboardImageId) {
+    logTemporarySourceImageDiagnostic({
+      courseId,
+      sourceId,
+      whiteboardImageId: source.whiteboardImageId,
+      filepath: source.whiteboardImage?.filepath,
+      mimeType: source.mimeType,
+      reason: "MISSING_IMAGE_LINK",
+    });
+    throw new AppError(404, "NOT_FOUND", "Original image not found");
+  }
   if (
-    !source ||
-    !source.topicId ||
-    !source.whiteboardImageId ||
     !source.mimeType ||
-    !ORIGINAL_IMAGE_MIME_TYPES.has(source.mimeType) ||
+    !ORIGINAL_IMAGE_MIME_TYPES.has(source.mimeType)
+  ) {
+    logTemporarySourceImageDiagnostic({
+      courseId,
+      sourceId,
+      whiteboardImageId: source.whiteboardImageId,
+      filepath: source.whiteboardImage?.filepath,
+      mimeType: source.mimeType,
+      reason: "UNSUPPORTED_MIME",
+    });
+    throw new AppError(404, "NOT_FOUND", "Original image not found");
+  }
+
+  const image = source.whiteboardImage;
+  if (
     !image ||
     image.id !== source.whiteboardImageId ||
-    image.topicId !== source.topicId ||
+    image.topicId !== source.topicId
+  ) {
+    logTemporarySourceImageDiagnostic({
+      courseId,
+      sourceId,
+      whiteboardImageId: source.whiteboardImageId,
+      filepath: image?.filepath,
+      mimeType: source.mimeType,
+      reason: "IMAGE_ROW_MISMATCH",
+    });
+    throw new AppError(404, "NOT_FOUND", "Original image not found");
+  }
+  if (
     image.topic.courseId !== courseId ||
     image.topic.userId !== userId ||
     image.topic.course.userId !== userId
   ) {
+    logTemporarySourceImageDiagnostic({
+      courseId,
+      sourceId,
+      whiteboardImageId: source.whiteboardImageId,
+      filepath: image.filepath,
+      mimeType: source.mimeType,
+      reason: "OWNERSHIP_MISMATCH",
+    });
     throw new AppError(404, "NOT_FOUND", "Original image not found");
   }
 
-  return { filepath: image.filepath, mimeType: source.mimeType };
+  return {
+    whiteboardImageId: source.whiteboardImageId,
+    filepath: image.filepath,
+    mimeType: source.mimeType,
+  };
 }
 
 export async function requireOwnedTopic(db: OriginalImageUploadDatabase, userId: string, courseId: string, topicId: string): Promise<void> {
