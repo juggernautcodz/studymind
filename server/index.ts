@@ -162,11 +162,18 @@ function setupRequestLogging(app: express.Application) {
 
       let logLine = `[${correlationId}] ${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse, redactSensitiveJson)}`;
-      }
-
-      if (logLine.length > 120) {
-        logLine = logLine.slice(0, 119) + "…";
+        const responsePayload = JSON.stringify(
+          capturedJsonResponse,
+          redactSensitiveJson,
+        );
+        const availablePayloadLength = 120 - logLine.length - 4;
+        if (availablePayloadLength > 0) {
+          const truncatedPayload =
+            responsePayload.length > availablePayloadLength
+              ? responsePayload.slice(0, availablePayloadLength - 1) + "…"
+              : responsePayload;
+          logLine += ` :: ${truncatedPayload}`;
+        }
       }
 
       log(logLine);
