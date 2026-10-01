@@ -2,7 +2,8 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import multer, { MulterError } from "multer";
 import { AppError, badRequest, internalError, sendError } from "./lib/errors";
 import { detectOriginalImageMimeType, ORIGINAL_IMAGE_MAX_BYTES, ORIGINAL_IMAGE_MAX_OCR_TEXT_LENGTH, originalImageUploadParams, uploadIdSchema } from "./lib/original-image-upload-validation";
-import { requireOwnedTopic, uploadOriginalImage, type OriginalImageUploadDatabase, type OriginalImageUploadDependencies } from "./original-image-upload-service";
+import { sourceDetailRouteParams } from "./lib/source-lock-validation";
+import { findOwnedSourceOriginalImage, requireOwnedTopic, uploadOriginalImage, type OriginalImageUploadDatabase, type OriginalImageUploadDependencies } from "./original-image-upload-service";
 import type { OriginalImageStorage } from "./lib/original-image-storage";
 
 export interface AuthRequest extends Request { user?: { id: string; email: string } }
@@ -32,8 +33,57 @@ function validateMultipart(req: AuthRequest): { uploadId: string; ocrText: strin
 
 export function createOriginalImagesRouter(options: OriginalImagesRouterOptions) {
   const router = Router();
-  const { authenticate, db } = options;
+  const { authenticate, db, storage } = options;
   const requireOwned = options.requireOwned ?? ((userId, courseId, topicId) => requireOwnedTopic(db, userId, courseId, topicId));
+  router.get("/courses/:courseId/sources/:sourceId/original-image", authenticate, async (req: AuthRequest, res: Response) => {
+    const params = sourceDetailRouteParams.safeParse(req.params);
+    if (!params.success) return badRequest(res, "Invalid route parameters");
+
+    try {
+      const image = await findOwnedSourceOriginalImage(
+        db,
+        req.user!.id,
+        params.data.courseId,
+        params.data.sourceId,
+      );
+
+      let exists: boolean;
+      try {
+        exists = await storage.exists(image.filepath);
+      } catch {
+        throw new AppError(
+          503,
+          "STORAGE_UNAVAILABLE",
+          "Original image is temporarily unavailable",
+        );
+      }
+      if (!exists) {
+        throw new AppError(404, "NOT_FOUND", "Original image not found");
+      }
+
+      res.setHeader("Content-Type", image.mimeType);
+      res.setHeader("Cache-Control", "private, no-store, max-age=0");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+
+      try {
+        await storage.pipeTo(image.filepath, res);
+      } catch {
+        if (res.headersSent) {
+          res.destroy();
+          return;
+        }
+        sendError(
+          res,
+          503,
+          "STORAGE_UNAVAILABLE",
+          "Original image is temporarily unavailable",
+        );
+      }
+    } catch (error) {
+      handleRetrievalError(res, error);
+    }
+  });
   router.post("/courses/:courseId/topics/:topicId/whiteboard-images", authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
     const params = originalImageUploadParams.safeParse(req.params);
     if (!params.success) return badRequest(res, "Invalid route parameters");
@@ -67,3 +117,11 @@ export async function createProductionOriginalImagesRouter() {
 }
 
 function handleError(res: Response, error: unknown): void { if (error instanceof AppError) { res.status(error.statusCode).json(error.toJSON()); return; } internalError(res, "Image upload failed"); }
+function handleRetrievalError(res: Response, error: unknown): void {
+  if (res.headersSent) return;
+  if (error instanceof AppError) {
+    res.status(error.statusCode).json(error.toJSON());
+    return;
+  }
+  internalError(res, "Original image request failed");
+}

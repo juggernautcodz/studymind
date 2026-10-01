@@ -4,9 +4,25 @@ import { originalImageObjectKey, type OriginalImageMimeType } from "./lib/origin
 
 type OwnedTopic = { id: string };
 type WhiteboardImage = { id: string; topicId: string; filename: string; filepath: string; ocrText: string | null };
+type SourceOriginalImage = {
+  topicId: string | null;
+  whiteboardImageId: string | null;
+  mimeType: string | null;
+  whiteboardImage: {
+    id: string;
+    topicId: string;
+    filepath: string;
+    topic: {
+      userId: string;
+      courseId: string;
+      course: { userId: string };
+    };
+  } | null;
+};
 
 export interface OriginalImageUploadDatabase {
   topic: { findFirst(args: unknown): Promise<OwnedTopic | null> };
+  source: { findFirst(args: unknown): Promise<SourceOriginalImage | null> };
   whiteboardImage: {
     findUnique(args: unknown): Promise<WhiteboardImage | null>;
     create(args: unknown): Promise<WhiteboardImage>;
@@ -16,6 +32,68 @@ export interface OriginalImageUploadDatabase {
 export interface OriginalImageUploadDependencies {
   db: OriginalImageUploadDatabase;
   storage: OriginalImageStorage;
+}
+
+const ORIGINAL_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+export type OwnedSourceOriginalImage = {
+  filepath: string;
+  mimeType: string;
+};
+
+export async function findOwnedSourceOriginalImage(
+  db: OriginalImageUploadDatabase,
+  userId: string,
+  courseId: string,
+  sourceId: string,
+): Promise<OwnedSourceOriginalImage> {
+  const source = await db.source.findFirst({
+    where: { id: sourceId, courseId, course: { userId } },
+    select: {
+      topicId: true,
+      whiteboardImageId: true,
+      mimeType: true,
+      whiteboardImage: {
+        select: {
+          id: true,
+          topicId: true,
+          filepath: true,
+          topic: {
+            select: {
+              userId: true,
+              courseId: true,
+              course: { select: { userId: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const image = source?.whiteboardImage;
+  if (
+    !source ||
+    !source.topicId ||
+    !source.whiteboardImageId ||
+    !source.mimeType ||
+    !ORIGINAL_IMAGE_MIME_TYPES.has(source.mimeType) ||
+    !image ||
+    image.id !== source.whiteboardImageId ||
+    image.topicId !== source.topicId ||
+    image.topic.courseId !== courseId ||
+    image.topic.userId !== userId ||
+    image.topic.course.userId !== userId
+  ) {
+    throw new AppError(404, "NOT_FOUND", "Original image not found");
+  }
+
+  return { filepath: image.filepath, mimeType: source.mimeType };
 }
 
 export async function requireOwnedTopic(db: OriginalImageUploadDatabase, userId: string, courseId: string, topicId: string): Promise<void> {
