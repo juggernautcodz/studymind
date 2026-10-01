@@ -3,73 +3,14 @@ import multer, { MulterError } from "multer";
 import { AppError, badRequest, internalError, sendError } from "./lib/errors";
 import { detectOriginalImageMimeType, ORIGINAL_IMAGE_MAX_BYTES, ORIGINAL_IMAGE_MAX_OCR_TEXT_LENGTH, originalImageUploadParams, uploadIdSchema } from "./lib/original-image-upload-validation";
 import { sourceDetailRouteParams } from "./lib/source-lock-validation";
-import { findOwnedSourceOriginalImage, logTemporarySourceImageDiagnostic, requireOwnedTopic, shouldLogTemporarySourceImageDiagnostic, uploadOriginalImage, type OriginalImageUploadDatabase, type OriginalImageUploadDependencies } from "./original-image-upload-service";
-import { OriginalImageStorageError, type OriginalImageStorage } from "./lib/original-image-storage";
+import { findOwnedSourceOriginalImage, requireOwnedTopic, uploadOriginalImage, type OriginalImageUploadDatabase, type OriginalImageUploadDependencies } from "./original-image-upload-service";
+import type { OriginalImageStorage } from "./lib/original-image-storage";
 
 export interface AuthRequest extends Request { user?: { id: string; email: string } }
 type Middleware = (req: AuthRequest, res: Response, next: NextFunction) => unknown;
 export interface OriginalImagesRouterOptions extends OriginalImageUploadDependencies { authenticate: Middleware; requireOwned?: (userId: string, courseId: string, topicId: string) => Promise<void>; }
 
 const multipart = multer({ storage: multer.memoryStorage(), limits: { fileSize: ORIGINAL_IMAGE_MAX_BYTES, files: 1, fields: 2 } }).fields([{ name: "image", maxCount: 1 }]);
-
-function logTemporaryRouteDiagnostic(
-  params: { courseId?: string; sourceId?: string },
-  marker: "ROUTE_ENTERED" | "AUTH_PASSED" | "SERVICE_CALLED" | "STORAGE_EXISTS_FAILED" | "STORAGE_DOWNLOAD_FAILED" | "FINAL_RESPONSE",
-  details: Record<string, unknown> = {},
-): void {
-  if (!shouldLogTemporarySourceImageDiagnostic(params.courseId, params.sourceId)) {
-    return;
-  }
-
-  console.log("[SourceImage route diagnostic]", {
-    marker,
-    courseId: params.courseId,
-    sourceId: params.sourceId,
-    ...details,
-  });
-}
-
-function sanitizeStorageDiagnosticMessage(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-
-  return value
-    .replace(/\r?\n/g, " ")
-    .replace(/https?:\/\/\S+/gi, "[REDACTED_URL]")
-    .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 [REDACTED]")
-    .replace(
-      /\b(authorization|access[_-]?token|refresh[_-]?token|api[_-]?key|secret|password|credential)\s*[:=]\s*\S+/gi,
-      "$1=[REDACTED]",
-    )
-    .slice(0, 500);
-}
-
-function safeStorageDiagnosticCode(value: unknown): string | number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && /^[A-Za-z0-9_.:-]{1,80}$/.test(value)) return value;
-  return undefined;
-}
-
-function storageDiagnosticDetails(error: unknown): Record<string, unknown> {
-  if (error instanceof OriginalImageStorageError) {
-    const cause = error.cause;
-    const causeRecord =
-      typeof cause === "object" && cause !== null
-        ? (cause as Record<string, unknown>)
-        : undefined;
-
-    return {
-      errorName: error.name,
-      errorMessage: sanitizeStorageDiagnosticMessage(error.message),
-      causeName: sanitizeStorageDiagnosticMessage(causeRecord?.name),
-      causeMessage: sanitizeStorageDiagnosticMessage(causeRecord?.message),
-      causeCode: safeStorageDiagnosticCode(causeRecord?.code),
-      storageOperation: error.operation,
-      storageStatusCode: error.statusCode,
-    };
-  }
-
-  return { storageOperation: "unknown" };
-}
 
 function safeMulterError(res: Response, error: unknown): void {
   if (error instanceof MulterError && error.code === "LIMIT_FILE_SIZE") return sendError(res, 413, "PAYLOAD_TOO_LARGE", "Image exceeds the 20 MB limit");
@@ -94,23 +35,11 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
   const router = Router();
   const { authenticate, db, storage } = options;
   const requireOwned = options.requireOwned ?? ((userId, courseId, topicId) => requireOwnedTopic(db, userId, courseId, topicId));
-  router.get("/courses/:courseId/sources/:sourceId/original-image", (req: Request, _res: Response, next: NextFunction) => {
-    logTemporaryRouteDiagnostic(req.params, "ROUTE_ENTERED");
-    _res.on("finish", () => {
-      logTemporaryRouteDiagnostic(req.params, "FINAL_RESPONSE", {
-        statusCode: _res.statusCode,
-      });
-    });
-    next();
-  }, authenticate, (req: AuthRequest, _res: Response, next: NextFunction) => {
-    logTemporaryRouteDiagnostic(req.params, "AUTH_PASSED");
-    next();
-  }, async (req: AuthRequest, res: Response) => {
+  router.get("/courses/:courseId/sources/:sourceId/original-image", authenticate, async (req: AuthRequest, res: Response) => {
     const params = sourceDetailRouteParams.safeParse(req.params);
     if (!params.success) return badRequest(res, "Invalid route parameters");
 
     try {
-      logTemporaryRouteDiagnostic(params.data, "SERVICE_CALLED");
       const image = await findOwnedSourceOriginalImage(
         db,
         req.user!.id,
@@ -121,22 +50,7 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
       let exists: boolean;
       try {
         exists = await storage.exists(image.filepath);
-      } catch (error) {
-        const diagnosticDetails = storageDiagnosticDetails(error);
-        logTemporaryRouteDiagnostic(
-          params.data,
-          "STORAGE_EXISTS_FAILED",
-          diagnosticDetails,
-        );
-        logTemporarySourceImageDiagnostic({
-          courseId: params.data.courseId,
-          sourceId: params.data.sourceId,
-          whiteboardImageId: image.whiteboardImageId,
-          filepath: image.filepath,
-          mimeType: image.mimeType,
-          reason: "STORAGE_EXISTS_FAILED",
-          ...diagnosticDetails,
-        });
+      } catch {
         throw new AppError(
           503,
           "STORAGE_UNAVAILABLE",
@@ -144,27 +58,8 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
         );
       }
       if (!exists) {
-        logTemporarySourceImageDiagnostic({
-          courseId: params.data.courseId,
-          sourceId: params.data.sourceId,
-          whiteboardImageId: image.whiteboardImageId,
-          filepath: image.filepath,
-          mimeType: image.mimeType,
-          storageExists: false,
-          reason: "STORAGE_OBJECT_MISSING",
-        });
         throw new AppError(404, "NOT_FOUND", "Original image not found");
       }
-
-      logTemporarySourceImageDiagnostic({
-        courseId: params.data.courseId,
-        sourceId: params.data.sourceId,
-        whiteboardImageId: image.whiteboardImageId,
-        filepath: image.filepath,
-        mimeType: image.mimeType,
-        storageExists: true,
-        reason: "LOOKUP_VALID",
-      });
 
       res.setHeader("Content-Type", image.mimeType);
       res.setHeader("Cache-Control", "private, no-store, max-age=0");
@@ -173,24 +68,7 @@ export function createOriginalImagesRouter(options: OriginalImagesRouterOptions)
 
       try {
         await storage.pipeTo(image.filepath, res);
-      } catch (error) {
-        const diagnosticDetails = storageDiagnosticDetails(error);
-        logTemporaryRouteDiagnostic(
-          params.data,
-          "STORAGE_DOWNLOAD_FAILED",
-          diagnosticDetails,
-        );
-        logTemporarySourceImageDiagnostic({
-          courseId: params.data.courseId,
-          sourceId: params.data.sourceId,
-          whiteboardImageId: image.whiteboardImageId,
-          filepath: image.filepath,
-          mimeType: image.mimeType,
-          storageExists: true,
-          responseHeadersSent: res.headersSent,
-          reason: "STORAGE_DOWNLOAD_FAILED",
-          ...diagnosticDetails,
-        });
+      } catch {
         if (res.headersSent) {
           res.destroy();
           return;
