@@ -95,6 +95,8 @@ export default function CourseScreen() {
   const [showAddTopicSheet, setShowAddTopicSheet] = useState(false);
   const [showRecordSheet, setShowRecordSheet] = useState(false);
   const [topicName, setTopicName] = useState("");
+  const [isCreatingTopic, setIsCreatingTopic] = useState(false);
+  const createTopicInFlight = useRef(false);
   const [activeTab, setActiveTab] = useState("topics");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingLabel, setUploadingLabel] = useState("Processing...");
@@ -908,7 +910,10 @@ export default function CourseScreen() {
   };
 
   const handleAddTopic = async () => {
-    if (!topicName.trim()) return;
+    if (!topicName.trim() || createTopicInFlight.current) return;
+    createTopicInFlight.current = true;
+    setIsCreatingTopic(true);
+
     try {
       const user = await storage.getUser();
       if (!user) return;
@@ -939,6 +944,9 @@ export default function CourseScreen() {
         title: "Failed",
         message: "Could not create topic",
       });
+    } finally {
+      createTopicInFlight.current = false;
+      setIsCreatingTopic(false);
     }
   };
 
@@ -1507,7 +1515,7 @@ export default function CourseScreen() {
         />
         <Button
           onPress={handleAddTopic}
-          disabled={!topicName.trim()}
+          disabled={!topicName.trim() || isCreatingTopic}
           size="lg"
           fullWidth
         >
