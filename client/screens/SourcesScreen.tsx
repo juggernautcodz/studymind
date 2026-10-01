@@ -1,7 +1,8 @@
 import React from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
@@ -9,9 +10,11 @@ import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import { Icon } from "@/components/Icon";
 import { BorderRadius, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 import { useCourseSources } from "@/lib/sourceLock";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 function sourceKindLabel(kind: string) {
   return kind
@@ -23,6 +26,8 @@ function sourceKindLabel(kind: string) {
 
 export default function SourcesScreen() {
   const route = useRoute<any>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const courseId = route.params?.courseId as string;
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
@@ -74,8 +79,27 @@ export default function SourcesScreen() {
               : sourceKindLabel(source.kind);
 
             return (
-              <Card key={source.id} style={styles.sourceCard}>
-                <ThemedText type="h4">{source.title}</ThemedText>
+              <Card
+                key={source.id}
+                style={styles.sourceCard}
+                onPress={() =>
+                  navigation.navigate("SourceDetail", {
+                    courseId,
+                    sourceId: source.id,
+                  })
+                }
+                accessibilityLabel={`View source ${source.title}`}
+              >
+                <View style={styles.sourceHeader}>
+                  <ThemedText type="h4" style={styles.sourceTitle}>
+                    {source.title}
+                  </ThemedText>
+                  <Icon
+                    name="chevron-right"
+                    size={20}
+                    color={theme.textSecondary}
+                  />
+                </View>
                 <ThemedText
                   type="small"
                   style={{ color: theme.textSecondary, marginTop: Spacing.xs }}
@@ -103,4 +127,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing["4xl"] },
   emptyContainer: { paddingTop: Spacing["4xl"] },
   sourceCard: { marginBottom: Spacing.sm, borderRadius: BorderRadius.md },
+  sourceHeader: { flexDirection: "row", alignItems: "center" },
+  sourceTitle: { flex: 1, marginRight: Spacing.sm },
 });

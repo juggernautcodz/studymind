@@ -47,12 +47,62 @@ export interface SourceLockSourceSummary {
   }>;
 }
 
+export interface SourceLockSourceDetail {
+  id: string;
+  kind: string;
+  title: string;
+  topicId: string | null;
+  recordingId: string | null;
+  whiteboardImageId: string | null;
+  originUri: string | null;
+  mimeType: string | null;
+  currentRevision: number;
+  createdAt: string;
+  updatedAt: string;
+  revisions: Array<{
+    id: string;
+    revision: number;
+    contentHash: string;
+    contentLength: number;
+    createdAt: string;
+    generationRun: {
+      id: string;
+      operation: string;
+      provider: string | null;
+      model: string | null;
+      createdAt: string;
+    } | null;
+    segments: Array<{
+      id: string;
+      position: number;
+      content: string;
+      locatorLabel: string | null;
+      pageNumber: number | null;
+      startSeconds: number | null;
+      endSeconds: number | null;
+      charStart: number | null;
+      charEnd: number | null;
+      regionX: number | null;
+      regionY: number | null;
+      regionWidth: number | null;
+      regionHeight: number | null;
+    }>;
+  }>;
+}
+
 interface SourcesResponse {
   sources: SourceLockSourceSummary[];
 }
 
+interface SourceDetailResponse {
+  source: SourceLockSourceDetail;
+}
+
 export const courseSourcesQueryKey = (courseId: string) =>
   ["course-sources", courseId] as const;
+
+export const sourceDetailQueryKey = (courseId: string, sourceId: string) =>
+  ["course-source", courseId, sourceId] as const;
 
 async function fetchCourseSources(
   courseId: string,
@@ -89,6 +139,51 @@ export function useCourseSources(courseId: string) {
     enabled: courseId.length > 0,
     staleTime: 30_000,
   });
+}
+
+async function fetchSourceDetail(
+  courseId: string,
+  sourceId: string,
+): Promise<SourceLockSourceDetail> {
+  const authHeaders = await getAuthHeaders();
+  if (!authHeaders.Authorization) throw new Error("Authentication required");
+
+  const response = await fetch(
+    new URL(
+      `/api/courses/${encodeURIComponent(courseId)}/sources/${encodeURIComponent(sourceId)}`,
+      getApiUrl(),
+    ).toString(),
+    {
+      method: "GET",
+      headers: authHeaders,
+      credentials: "include",
+    },
+  );
+
+  const payload = (await response
+    .json()
+    .catch(() => null)) as SourceDetailResponse | null;
+  if (!response.ok || !payload?.source) {
+    throw new Error(errorMessage(payload, "Could not load source details"));
+  }
+
+  return payload.source;
+}
+
+export function useSourceDetail(courseId: string, sourceId: string) {
+  return useQuery({
+    queryKey: sourceDetailQueryKey(courseId, sourceId),
+    queryFn: () => fetchSourceDetail(courseId, sourceId),
+    enabled: courseId.length > 0 && sourceId.length > 0,
+    staleTime: 30_000,
+  });
+}
+
+export function sourceOriginalImageUrl(courseId: string, sourceId: string) {
+  return new URL(
+    `/api/courses/${encodeURIComponent(courseId)}/sources/${encodeURIComponent(sourceId)}/original-image`,
+    getApiUrl(),
+  ).toString();
 }
 
 const MAX_SEGMENT_CHARACTERS = 20_000;
