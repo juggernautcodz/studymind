@@ -7,6 +7,7 @@ import { Icon } from "@/components/Icon";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { useTheme } from "@/hooks/useTheme";
 import { storage } from "@/lib/storage";
@@ -55,9 +56,11 @@ export default function LibraryScreen() {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const [topics, courses, notes, flashcards, quizzes] = await Promise.all([
         storage.getTopics(),
@@ -128,6 +131,8 @@ export default function LibraryScreen() {
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
       setItems(built);
+    } catch {
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -227,6 +232,20 @@ export default function LibraryScreen() {
 
   if (isLoading) {
     return <LoadingState fullScreen message="Loading your library..." />;
+  }
+
+  if (loadError) {
+    return (
+      <ThemedView
+        style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      >
+        <ErrorState
+          title="Couldn't load your library"
+          message="Please try again."
+          onRetry={() => void loadLibrary()}
+        />
+      </ThemedView>
+    );
   }
 
   return (
