@@ -1232,6 +1232,7 @@ export default function CourseScreen() {
 
     return (
       <FlatList
+        style={styles.topicsFlatList}
         data={topics}
         renderItem={renderTopic}
         keyExtractor={(item) => item.id}
@@ -1746,7 +1747,9 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    minHeight: 400,
+  },
+  topicsFlatList: {
+    flex: 1,
   },
   tabFillContainer: {
     flex: 1,

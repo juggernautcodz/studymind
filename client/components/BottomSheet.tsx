@@ -46,7 +46,8 @@ export function BottomSheet({
   const context = useSharedValue({ y: 0 });
   const active = useSharedValue(false);
 
-  const defaultSnapPoint = -SCREEN_HEIGHT * snapPoints[0];
+  const sheetHeight = SCREEN_HEIGHT * snapPoints[0];
+  const defaultSnapPoint = -sheetHeight;
 
   useEffect(() => {
     if (visible) {
@@ -120,37 +121,39 @@ export function BottomSheet({
         >
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         </Animated.View>
-        <GestureDetector gesture={gesture}>
-          <Animated.View
-            style={[
-              styles.container,
-              {
-                backgroundColor: theme.backgroundDefault,
-                paddingBottom: insets.bottom + Spacing.lg,
-              },
-              animatedStyle,
-            ]}
-          >
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              backgroundColor: theme.backgroundDefault,
+              height: sheetHeight,
+              paddingBottom: insets.bottom + Spacing.lg,
+            },
+            animatedStyle,
+          ]}
+        >
+          <GestureDetector gesture={gesture}>
             <View style={styles.handleContainer}>
               <View
                 style={[styles.handle, { backgroundColor: theme.border }]}
               />
             </View>
-            {title ? (
-              <View style={styles.header}>
-                <ThemedText type="h3">{title}</ThemedText>
-              </View>
-            ) : null}
-            <ScrollView
-              style={styles.content}
-              contentContainerStyle={styles.contentInner}
-              keyboardShouldPersistTaps="handled"
-              bounces={false}
-            >
-              {children}
-            </ScrollView>
-          </Animated.View>
-        </GestureDetector>
+          </GestureDetector>
+          {title ? (
+            <View style={styles.header}>
+              <ThemedText type="h3">{title}</ThemedText>
+            </View>
+          ) : null}
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={styles.contentInner}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+            bounces={false}
+          >
+            {children}
+          </ScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -164,7 +167,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   container: {
-    height: SCREEN_HEIGHT,
     width: "100%",
     position: "absolute",
     top: SCREEN_HEIGHT,
