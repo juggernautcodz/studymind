@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, FlatList, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -57,18 +57,22 @@ export default function LibraryScreen() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const hasLoadedData = useRef(false);
 
-  const loadLibrary = useCallback(async () => {
-    setIsLoading(true);
+  const loadLibrary = useCallback(async (showLoading = !hasLoadedData.current) => {
+    if (showLoading) {
+      setIsLoading(true);
+    }
+
     setLoadError(false);
     try {
-      const [topics, courses, notes, flashcards, quizzes] = await Promise.all([
-        storage.getTopics(),
-        storage.getCourses(),
-        storage.getAllNotes(),
-        storage.getAllFlashcards(),
-        storage.getAllQuizzes(),
-      ]);
+      const result = await storage.getLibraryData();
+      if (!result.ok) {
+        setLoadError(true);
+        return;
+      }
+
+      const { topics, courses, notes, flashcards, quizzes } = result;
 
       const courseNameById = new Map(courses.map((c) => [c.id, c.name]));
       const topicById = new Map(topics.map((t) => [t.id, t]));
@@ -131,10 +135,13 @@ export default function LibraryScreen() {
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
       setItems(built);
+      hasLoadedData.current = true;
     } catch {
       setLoadError(true);
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -242,7 +249,7 @@ export default function LibraryScreen() {
         <ErrorState
           title="Couldn't load your library"
           message="Please try again."
-          onRetry={() => void loadLibrary()}
+          onRetry={() => void loadLibrary(true)}
         />
       </ThemedView>
     );

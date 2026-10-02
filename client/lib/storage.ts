@@ -238,6 +238,45 @@ export const storage = {
     };
   },
 
+  async getLibraryData(): Promise<
+    | {
+        ok: true;
+        topics: Topic[];
+        courses: Course[];
+        notes: Notes[];
+        flashcards: Flashcard[];
+        quizzes: Quiz[];
+      }
+    | { ok: false }
+  > {
+    const [topics, courses, notes, flashcards, quizzes] = await Promise.all([
+      getItemsReadResult<Topic>(KEYS.TOPICS),
+      getItemsReadResult<Course>(KEYS.COURSES),
+      getItemsReadResult<Notes>(KEYS.NOTES),
+      getItemsReadResult<Flashcard>(KEYS.FLASHCARDS),
+      getItemsReadResult<Quiz>(KEYS.QUIZZES),
+    ]);
+
+    if (
+      !topics.ok ||
+      !courses.ok ||
+      !notes.ok ||
+      !flashcards.ok ||
+      !quizzes.ok
+    ) {
+      return { ok: false };
+    }
+
+    return {
+      ok: true,
+      topics: topics.items,
+      courses: courses.items,
+      notes: notes.items,
+      flashcards: flashcards.items,
+      quizzes: quizzes.items,
+    };
+  },
+
   async getCoursesBySemester(semesterId: string): Promise<Course[]> {
     const courses = await this.getCourses();
     return courses.filter((c) => c.semesterId === semesterId);
