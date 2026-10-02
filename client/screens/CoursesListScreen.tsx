@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { View, StyleSheet, FlatList, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -9,6 +9,7 @@ import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/ThemedText";
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { SkeletonList } from "@/components/Skeleton";
 import { useTheme } from "@/hooks/useTheme";
@@ -28,20 +29,32 @@ export default function CoursesListScreen() {
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const hasLoadedData = useRef(false);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (showLoading = !hasLoadedData.current) => {
+    if (showLoading) {
+      setIsLoading(true);
+    }
+
+    setLoadError(false);
     try {
-      const [loadedCourses, loadedSemesters, loadedTopics] =
-        await Promise.all([
-          storage.getCourses(),
-          storage.getSemesters(),
-          storage.getTopics(),
-        ]);
-      setCourses(loadedCourses);
-      setSemesters(loadedSemesters);
-      setTopics(loadedTopics);
+      const result = await storage.getCoursesListData();
+      if (!result.ok) {
+        setLoadError(true);
+        return;
+      }
+
+      setCourses(result.courses);
+      setSemesters(result.semesters);
+      setTopics(result.topics);
+      hasLoadedData.current = true;
+    } catch {
+      setLoadError(true);
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -196,6 +209,18 @@ export default function CoursesListScreen() {
         >
           <SkeletonList count={4} />
         </View>
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+        <ErrorState
+          title="Couldn't load your courses"
+          message="Please try again."
+          onRetry={() => void loadData(true)}
+        />
       </View>
     );
   }

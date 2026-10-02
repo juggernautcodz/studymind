@@ -67,6 +67,23 @@ async function getItems<T>(key: string): Promise<T[]> {
   }
 }
 
+type StorageItemsReadResult<T> =
+  | { ok: true; items: T[] }
+  | { ok: false };
+
+async function getItemsReadResult<T>(
+  key: string,
+): Promise<StorageItemsReadResult<T>> {
+  try {
+    const data = await AsyncStorage.getItem(scopeKey(key));
+    const parsed = data ? JSON.parse(data) : [];
+
+    return Array.isArray(parsed) ? { ok: true, items: parsed } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 async function setItems<T>(key: string, items: T[]): Promise<void> {
   await AsyncStorage.setItem(scopeKey(key), JSON.stringify(items));
 }
@@ -197,6 +214,28 @@ export const storage = {
 
   async getCourses(): Promise<Course[]> {
     return getItems<Course>(KEYS.COURSES);
+  },
+
+  async getCoursesListData(): Promise<
+    | { ok: true; courses: Course[]; semesters: Semester[]; topics: Topic[] }
+    | { ok: false }
+  > {
+    const [courses, semesters, topics] = await Promise.all([
+      getItemsReadResult<Course>(KEYS.COURSES),
+      getItemsReadResult<Semester>(KEYS.SEMESTERS),
+      getItemsReadResult<Topic>(KEYS.TOPICS),
+    ]);
+
+    if (!courses.ok || !semesters.ok || !topics.ok) {
+      return { ok: false };
+    }
+
+    return {
+      ok: true,
+      courses: courses.items,
+      semesters: semesters.items,
+      topics: topics.items,
+    };
   },
 
   async getCoursesBySemester(semesterId: string): Promise<Course[]> {
