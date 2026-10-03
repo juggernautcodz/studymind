@@ -43,7 +43,14 @@ export function LoadingState({
   }));
 
   const content = (
-    <View style={styles.content}>
+    <View
+      style={styles.content}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={message}
+      accessibilityState={{ busy: true }}
+      accessibilityLiveRegion="polite"
+    >
       <ActivityIndicator
         size={size}
         color={theme.link}

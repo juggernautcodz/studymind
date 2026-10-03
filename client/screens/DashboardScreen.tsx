@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  useEffect,
+} from "react";
 import {
   View,
   StyleSheet,
@@ -25,12 +31,12 @@ import * as DocumentPicker from "expo-document-picker";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
 import { BottomSheet } from "@/components/BottomSheet";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { Badge } from "@/components/Badge";
 import { SectionHeader } from "@/components/SectionHeader";
-import { LoadingState } from "@/components/LoadingState";
 import { SkeletonCard, SkeletonList } from "@/components/Skeleton";
 import { ListItem } from "@/components/ListItem";
 import { StatusChip } from "@/components/StatusChip";
@@ -68,6 +74,7 @@ export default function DashboardScreen() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showQuickRecordSheet, setShowQuickRecordSheet] = useState(false);
   const [showCoursePickerSheet, setShowCoursePickerSheet] = useState(false);
@@ -77,19 +84,31 @@ export default function DashboardScreen() {
   const [semesterName, setSemesterName] = useState("");
   const [showPasteSheet, setShowPasteSheet] = useState(false);
   const [pasteText, setPasteText] = useState("");
-  const [pasteTargetCourseId, setPasteTargetCourseId] = useState<string | null>(null);
+  const [pasteTargetCourseId, setPasteTargetCourseId] = useState<string | null>(
+    null,
+  );
   const [isUploading, setIsUploading] = useState(false);
   const [processingSteps, setProcessingSteps] = useState<string[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [totalFlashcardCount, setTotalFlashcardCount] = useState(0);
-  const [dueFlashcardCount, setDueFlashcardCount] = useState<number | null>(null);
+  const [dueFlashcardCount, setDueFlashcardCount] = useState<number | null>(
+    null,
+  );
   const [weeklyActivityCount, setWeeklyActivityCount] = useState(0);
   const [recentTopicIds, setRecentTopicIds] = useState<string[]>([]);
-  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(
+    null,
+  );
 
   const isMounted = useRef(true);
-  const ensureFullSetupInFlight = useRef<Promise<{ courseId: string; topicId: string } | null> | null>(null);
-  const ensureTopicForCourseInFlight = useRef<Record<string, Promise<string | null> | undefined>>({});
+  const hasLoadedPrimaryData = useRef(false);
+  const ensureFullSetupInFlight = useRef<Promise<{
+    courseId: string;
+    topicId: string;
+  } | null> | null>(null);
+  const ensureTopicForCourseInFlight = useRef<
+    Record<string, Promise<string | null> | undefined>
+  >({});
   const flashcardLoadId = useRef(0);
   const cancelledRef = useRef(false);
 
@@ -119,96 +138,131 @@ export default function DashboardScreen() {
     cancelledRef.current = true;
     setIsUploading(false);
     setProcessingSteps([]);
-    showToast({ type: "info", title: "Cancelled", message: "Processing stopped." });
+    showToast({
+      type: "info",
+      title: "Cancelled",
+      message: "Processing stopped.",
+    });
   };
 
   // ─── Data loading ──────────────────────────────────────────────────────────
 
-  const loadData = useCallback(async () => {
-    try {
-      await storage.recoverStuckTopics();
-      const [loadedSemesters, loadedCourses, loadedTopics] =
-        await Promise.all([
-          storage.getSemesters(),
-          storage.getCourses(),
-          storage.getTopics(),
-        ]);
-      if (!isMounted.current) return;
-      setSemesters(
-        loadedSemesters.sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        ),
-      );
-      setCourses(loadedCourses);
-      setTopics(loadedTopics);
-
-      storage
-        .getRecentTopicIds()
-        .then((ids) => {
-          if (isMounted.current) setRecentTopicIds(ids);
-        })
-        .catch(() => {});
-
-      try {
-        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const [quizAttempts, examAttempts] = await Promise.all([
-          storage.getQuizAttempts(),
-          storage.getExamAttempts(),
-        ]);
-        const recentCount =
-          quizAttempts.filter((a) => new Date(a.completedAt).getTime() >= weekAgo).length +
-          examAttempts.filter((a) => new Date(a.completedAt).getTime() >= weekAgo).length;
-        if (isMounted.current) setWeeklyActivityCount(recentCount);
-      } catch {
-        if (isMounted.current) setWeeklyActivityCount(0);
+  const loadData = useCallback(
+    async (showLoading = !hasLoadedPrimaryData.current) => {
+      if (showLoading && isMounted.current) {
+        setIsLoading(true);
+        setLoadError(false);
       }
 
-      const currentLoadId = ++flashcardLoadId.current;
-      let cardCount = 0;
       try {
-        const allCards = await storage.getAllFlashcards();
-        cardCount = allCards.length;
-        if (isMounted.current && flashcardLoadId.current === currentLoadId) {
-          setTotalFlashcardCount(cardCount);
-        }
-      } catch {
-        if (isMounted.current && flashcardLoadId.current === currentLoadId) {
-          setTotalFlashcardCount(0);
-        }
-      }
+        await storage.recoverStuckTopics();
+        const primaryData = await storage.getCoursesListData();
 
-      // Real due-for-review count from the SM-2 engine (server/adaptive.ts) —
-      // null (not 0) when it can't be determined (offline/guest), so
-      // getNextAction() falls back to the legacy "has any flashcards" copy
-      // instead of wrongly claiming "all caught up".
-      if (cardCount > 0) {
+        if (!primaryData.ok) {
+          if (isMounted.current && !hasLoadedPrimaryData.current) {
+            setLoadError(true);
+          }
+          return;
+        }
+
+        if (!isMounted.current) return;
+        setSemesters(
+          primaryData.semesters.sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          ),
+        );
+        setCourses(primaryData.courses);
+        setTopics(primaryData.topics);
+        hasLoadedPrimaryData.current = true;
+        setLoadError(false);
+
+        storage
+          .getRecentTopicIds()
+          .then((ids) => {
+            if (isMounted.current) setRecentTopicIds(ids);
+          })
+          .catch(() => {});
+
         try {
-          const authHeaders = await getAuthHeaders();
-          const response = await fetch(
-            new URL("/api/adaptive/study-today", getApiUrl()).toString(),
-            { headers: authHeaders, credentials: "include" },
-          );
-          const due = response.ok
-            ? (await response.json())?.studyStats?.totalFlashcardsDue ?? null
-            : null;
+          const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const [quizAttempts, examAttempts] = await Promise.all([
+            storage.getQuizAttempts(),
+            storage.getExamAttempts(),
+          ]);
+          const recentCount =
+            quizAttempts.filter(
+              (a) => new Date(a.completedAt).getTime() >= weekAgo,
+            ).length +
+            examAttempts.filter(
+              (a) => new Date(a.completedAt).getTime() >= weekAgo,
+            ).length;
+          if (isMounted.current) setWeeklyActivityCount(recentCount);
+        } catch {
+          if (isMounted.current) setWeeklyActivityCount(0);
+        }
+
+        const currentLoadId = ++flashcardLoadId.current;
+        let cardCount = 0;
+        try {
+          const allCards = await storage.getAllFlashcards();
+          cardCount = allCards.length;
           if (isMounted.current && flashcardLoadId.current === currentLoadId) {
-            setDueFlashcardCount(typeof due === "number" ? due : null);
+            setTotalFlashcardCount(cardCount);
           }
         } catch {
           if (isMounted.current && flashcardLoadId.current === currentLoadId) {
-            setDueFlashcardCount(null);
+            setTotalFlashcardCount(0);
           }
         }
-      } else if (isMounted.current && flashcardLoadId.current === currentLoadId) {
-        setDueFlashcardCount(null);
+
+        // Real due-for-review count from the SM-2 engine (server/adaptive.ts) —
+        // null (not 0) when it can't be determined (offline/guest), so
+        // getNextAction() falls back to the legacy "has any flashcards" copy
+        // instead of wrongly claiming "all caught up".
+        if (cardCount > 0) {
+          try {
+            const authHeaders = await getAuthHeaders();
+            const response = await fetch(
+              new URL("/api/adaptive/study-today", getApiUrl()).toString(),
+              { headers: authHeaders, credentials: "include" },
+            );
+            const due = response.ok
+              ? ((await response.json())?.studyStats?.totalFlashcardsDue ??
+                null)
+              : null;
+            if (
+              isMounted.current &&
+              flashcardLoadId.current === currentLoadId
+            ) {
+              setDueFlashcardCount(typeof due === "number" ? due : null);
+            }
+          } catch {
+            if (
+              isMounted.current &&
+              flashcardLoadId.current === currentLoadId
+            ) {
+              setDueFlashcardCount(null);
+            }
+          }
+        } else if (
+          isMounted.current &&
+          flashcardLoadId.current === currentLoadId
+        ) {
+          setDueFlashcardCount(null);
+        }
+      } catch {
+        if (isMounted.current && !hasLoadedPrimaryData.current) {
+          setLoadError(true);
+        }
+      } finally {
+        if (isMounted.current && showLoading) {
+          setIsLoading(false);
+        }
       }
-    } finally {
-      if (isMounted.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+    },
+    [],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -224,9 +278,13 @@ export default function DashboardScreen() {
     return courses.filter((c) => c.semesterId === semesterId).length;
   };
 
-  const completedTopics = useMemo(() => topics.filter((t) => t.status === "completed"), [topics]);
+  const completedTopics = useMemo(
+    () => topics.filter((t) => t.status === "completed"),
+    [topics],
+  );
   const hasContent = topics.length > 0 || courses.length > 0;
-  const hasStats = topics.length > 0 || totalFlashcardCount > 0 || courses.length > 0;
+  const hasStats =
+    topics.length > 0 || totalFlashcardCount > 0 || courses.length > 0;
 
   const getNextAction = (): NextAction | null => {
     if (dueFlashcardCount !== null) {
@@ -274,7 +332,10 @@ export default function DashboardScreen() {
         icon: "loader",
         color: theme.info,
         onPress: () =>
-          navigation.navigate("Topic", { topicId: processingTopic.id, courseId: processingTopic.courseId }),
+          navigation.navigate("Topic", {
+            topicId: processingTopic.id,
+            courseId: processingTopic.courseId,
+          }),
       };
     }
 
@@ -292,14 +353,20 @@ export default function DashboardScreen() {
     return null;
   };
 
-  const ensureFullSetup = async (): Promise<{ courseId: string; topicId: string } | null> => {
+  const ensureFullSetup = async (): Promise<{
+    courseId: string;
+    topicId: string;
+  } | null> => {
     // Several "add content" buttons can each call this before `loadData()`
     // updates component state — without sharing one in-flight run, each
     // call sees an empty semesters/courses/topics list and creates its own
     // duplicate "My Studies" / "General" default setup.
     if (ensureFullSetupInFlight.current) return ensureFullSetupInFlight.current;
 
-    const run = async (): Promise<{ courseId: string; topicId: string } | null> => {
+    const run = async (): Promise<{
+      courseId: string;
+      topicId: string;
+    } | null> => {
       try {
         const currentUser = await storage.getUser();
         if (!currentUser) return null;
@@ -315,7 +382,9 @@ export default function DashboardScreen() {
             userId: currentUser.id,
             name: "My Studies",
             startDate: new Date().toISOString(),
-            endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            endDate: new Date(
+              Date.now() + 365 * 24 * 60 * 60 * 1000,
+            ).toISOString(),
           });
           currentSemesters = [newSemester];
         }
@@ -332,23 +401,32 @@ export default function DashboardScreen() {
         }
 
         const targetCourseId = currentCourses[0].id;
-        let courseTopics = currentTopics.filter((t) => t.courseId === targetCourseId);
+        let courseTopics = currentTopics.filter(
+          (t) => t.courseId === targetCourseId,
+        );
         if (courseTopics.length === 0) {
           const token = await getAuthToken();
-          const newTopic = await createTopicWithServerSync({
-            userId: currentUser.id,
-            courseId: targetCourseId,
-            name: "General",
-            orderIndex: 0,
-            status: "pending",
-          }, token);
+          const newTopic = await createTopicWithServerSync(
+            {
+              userId: currentUser.id,
+              courseId: targetCourseId,
+              name: "General",
+              orderIndex: 0,
+              status: "pending",
+            },
+            token,
+          );
           courseTopics = [newTopic];
         }
 
         await loadData();
         return { courseId: targetCourseId, topicId: courseTopics[0].id };
       } catch {
-        showToast({ type: "error", title: "Error", message: "Could not set up. Please try again." });
+        showToast({
+          type: "error",
+          title: "Error",
+          message: "Could not set up. Please try again.",
+        });
         return null;
       }
     };
@@ -435,7 +513,8 @@ export default function DashboardScreen() {
   };
 
   const [showDeleteSheet, setShowDeleteSheet] = useState(false);
-  const [deleteSemesterTarget, setDeleteSemesterTarget] = useState<Semester | null>(null);
+  const [deleteSemesterTarget, setDeleteSemesterTarget] =
+    useState<Semester | null>(null);
 
   const handleDeleteSemester = (semester: Semester) => {
     setDeleteSemesterTarget(semester);
@@ -471,7 +550,9 @@ export default function DashboardScreen() {
     }
   };
 
-  const ensureTopicForCourse = async (courseId: string): Promise<string | null> => {
+  const ensureTopicForCourse = async (
+    courseId: string,
+  ): Promise<string | null> => {
     if (ensureTopicForCourseInFlight.current[courseId]) {
       return ensureTopicForCourseInFlight.current[courseId];
     }
@@ -483,17 +564,24 @@ export default function DashboardScreen() {
         const currentUser = await storage.getUser();
         if (!currentUser) return null;
         const token = await getAuthToken();
-        const newTopic = await createTopicWithServerSync({
-          userId: currentUser.id,
-          courseId,
-          name: "General",
-          orderIndex: 0,
-          status: "pending",
-        }, token);
+        const newTopic = await createTopicWithServerSync(
+          {
+            userId: currentUser.id,
+            courseId,
+            name: "General",
+            orderIndex: 0,
+            status: "pending",
+          },
+          token,
+        );
         await loadData();
         return newTopic.id;
       } catch {
-        showToast({ type: "error", title: "Error", message: "Could not set up. Please try again." });
+        showToast({
+          type: "error",
+          title: "Error",
+          message: "Could not set up. Please try again.",
+        });
         return null;
       }
     };
@@ -507,7 +595,9 @@ export default function DashboardScreen() {
 
   const readFileAsBase64 = async (uri: string): Promise<string> => {
     if (Platform.OS !== "web") {
-      return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      return FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
     }
     const resp = await fetch(uri);
     const blob = await resp.blob();
@@ -532,7 +622,11 @@ export default function DashboardScreen() {
   };
 
   // generateStepIdx = index of the "Generating materials" step in the current flow's step array
-  const generateStudyMaterials = async (text: string, topicId: string, generateStepIdx = 0) => {
+  const generateStudyMaterials = async (
+    text: string,
+    topicId: string,
+    generateStepIdx = 0,
+  ) => {
     if (!text || text.trim().length < 20) return;
     if (cancelledRef.current) return;
 
@@ -566,7 +660,9 @@ export default function DashboardScreen() {
       if (notesRes.status === "fulfilled" && notesRes.value.ok) {
         const data = await notesRes.value.json();
         if (data.summary) {
-          const summaryBullets = data.summary.split(/\n+/).filter((line: string) => line.trim());
+          const summaryBullets = data.summary
+            .split(/\n+/)
+            .filter((line: string) => line.trim());
           const timestamp = new Date().toLocaleString("en-US", {
             month: "short",
             day: "numeric",
@@ -576,7 +672,9 @@ export default function DashboardScreen() {
           await storage.saveNotes({
             topicId,
             title: "Study Notes",
-            sections: [{ heading: `Notes (${timestamp})`, bullets: summaryBullets }],
+            sections: [
+              { heading: `Notes (${timestamp})`, bullets: summaryBullets },
+            ],
           });
         }
       }
@@ -585,7 +683,12 @@ export default function DashboardScreen() {
         if (data.flashcards && data.flashcards.length > 0) {
           await storage.saveFlashcards(
             topicId,
-            data.flashcards.map((c: any, i: number) => ({ question: c.front, answer: c.back, orderIndex: i, sourceQuote: c.quote })),
+            data.flashcards.map((c: any, i: number) => ({
+              question: c.front,
+              answer: c.back,
+              orderIndex: i,
+              sourceQuote: c.quote,
+            })),
           );
         }
       }
@@ -597,7 +700,8 @@ export default function DashboardScreen() {
             data.questions.map((q: any) => ({
               question: q.question,
               options: q.options,
-              correctIndex: typeof q.correctAnswer === "number" ? q.correctAnswer : 0,
+              correctIndex:
+                typeof q.correctAnswer === "number" ? q.correctAnswer : 0,
             })),
           );
         }
@@ -624,9 +728,18 @@ export default function DashboardScreen() {
     }
   };
 
-  const processImage = async (uri: string, targetTopicId: string, courseId?: string) => {
+  const processImage = async (
+    uri: string,
+    targetTopicId: string,
+    courseId?: string,
+  ) => {
     if (isUploading) return;
-    startProcessing(["Compressing image", "Extracting text", "Generating materials", "Saving"]);
+    startProcessing([
+      "Compressing image",
+      "Extracting text",
+      "Generating materials",
+      "Saving",
+    ]);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       advanceStep(0);
@@ -648,11 +761,19 @@ export default function DashboardScreen() {
       if (cancelledRef.current) return;
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(typeof errData.error === "string" ? errData.error : "OCR extraction failed");
+        throw new Error(
+          typeof errData.error === "string"
+            ? errData.error
+            : "OCR extraction failed",
+        );
       }
       const data = await response.json();
       const ocrText = data.text || "";
-      await storage.saveWhiteboardImage({ topicId: targetTopicId, imagePath: uri, ocrText });
+      await storage.saveWhiteboardImage({
+        topicId: targetTopicId,
+        imagePath: uri,
+        ocrText,
+      });
 
       if (ocrText.trim().length >= 20) {
         await generateStudyMaterials(ocrText, targetTopicId, 2);
@@ -660,7 +781,11 @@ export default function DashboardScreen() {
       if (cancelledRef.current) return;
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast({ type: "success", title: "Study materials created!", message: "Tap to view your new notes, flashcards, and quiz." });
+      showToast({
+        type: "success",
+        title: "Study materials created!",
+        message: "Tap to view your new notes, flashcards, and quiz.",
+      });
       loadData();
       if (courseId) {
         navigation.navigate("Topic", { topicId: targetTopicId, courseId });
@@ -668,7 +793,11 @@ export default function DashboardScreen() {
     } catch (error: any) {
       if (!cancelledRef.current) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        showToast({ type: "error", title: "Error", message: error?.message || "Failed to process image." });
+        showToast({
+          type: "error",
+          title: "Error",
+          message: error?.message || "Failed to process image.",
+        });
       }
     } finally {
       setIsUploading(false);
@@ -690,7 +819,11 @@ export default function DashboardScreen() {
     await executeContentWithTopic(actionType, courseId, null);
   };
 
-  const executeContentWithTopic = async (actionType: string, courseId: string, topicId: string | null) => {
+  const executeContentWithTopic = async (
+    actionType: string,
+    courseId: string,
+    topicId: string | null,
+  ) => {
     switch (actionType) {
       case "camera":
         await handleTakePhoto(courseId, topicId);
@@ -707,39 +840,61 @@ export default function DashboardScreen() {
     }
   };
 
-  const resolveTopicId = async (courseId: string, topicId: string | null): Promise<string | null> => {
+  const resolveTopicId = async (
+    courseId: string,
+    topicId: string | null,
+  ): Promise<string | null> => {
     if (topicId) return topicId;
     return ensureTopicForCourse(courseId);
   };
 
-  const handleTakePhoto = async (courseId: string, preselectedTopicId: string | null = null) => {
+  const handleTakePhoto = async (
+    courseId: string,
+    preselectedTopicId: string | null = null,
+  ) => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
         showToast({
           type: "warning",
           title: Platform.OS !== "web" ? "Permission needed" : "Not available",
-          message: Platform.OS !== "web"
-            ? "Please allow camera access to capture notes."
-            : "Camera capture is not available on web. Use file upload instead.",
+          message:
+            Platform.OS !== "web"
+              ? "Please allow camera access to capture notes."
+              : "Camera capture is not available on web. Use file upload instead.",
         });
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.8,
+      });
       if (!result.canceled && result.assets[0]) {
         const tid = await resolveTopicId(courseId, preselectedTopicId);
         if (tid) await processImage(result.assets[0].uri, tid, courseId);
       }
     } catch {
-      showToast({ type: "error", title: "Error", message: "Failed to capture image." });
+      showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to capture image.",
+      });
     }
   };
 
-  const handlePickGallery = async (courseId: string, preselectedTopicId: string | null = null) => {
+  const handlePickGallery = async (
+    courseId: string,
+    preselectedTopicId: string | null = null,
+  ) => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        showToast({ type: "warning", title: "Permission needed", message: "Allow access to your photo library." });
+        showToast({
+          type: "warning",
+          title: "Permission needed",
+          message: "Allow access to your photo library.",
+        });
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -752,25 +907,42 @@ export default function DashboardScreen() {
         if (tid) await processImage(result.assets[0].uri, tid, courseId);
       }
     } catch {
-      showToast({ type: "error", title: "Error", message: "Failed to pick image." });
+      showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to pick image.",
+      });
     }
   };
 
-  const handlePickDocument = async (courseId: string, preselectedTopicId: string | null = null) => {
+  const handlePickDocument = async (
+    courseId: string,
+    preselectedTopicId: string | null = null,
+  ) => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ["text/*", "application/pdf", "image/*"],
       });
-      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      if (result.canceled || !result.assets || result.assets.length === 0)
+        return;
       const asset = result.assets[0];
       if (asset.size && asset.size > 40 * 1024 * 1024) {
-        showToast({ type: "warning", title: "File Too Large", message: "Please choose a file under 40 MB." });
+        showToast({
+          type: "warning",
+          title: "File Too Large",
+          message: "Please choose a file under 40 MB.",
+        });
         return;
       }
       const tid = await resolveTopicId(courseId, preselectedTopicId);
       if (!tid) return;
 
-      startProcessing(["Reading document", "Extracting text", "Generating materials", "Saving"]);
+      startProcessing([
+        "Reading document",
+        "Extracting text",
+        "Generating materials",
+        "Saving",
+      ]);
       advanceStep(0);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -793,13 +965,21 @@ export default function DashboardScreen() {
             method: "POST",
             headers: { "Content-Type": "application/json", ...authHeaders },
             credentials: "include",
-            body: JSON.stringify({ imageBase64: fileBase64, topicId: tid, fileType: "pdf" }),
+            body: JSON.stringify({
+              imageBase64: fileBase64,
+              topicId: tid,
+              fileType: "pdf",
+            }),
           },
         );
         if (cancelledRef.current) return;
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          throw new Error(typeof errData.error === "string" ? errData.error : "Document extraction failed");
+          throw new Error(
+            typeof errData.error === "string"
+              ? errData.error
+              : "Document extraction failed",
+          );
         }
         const data = await response.json();
         extractedText = data.text || "";
@@ -808,29 +988,50 @@ export default function DashboardScreen() {
       if (cancelledRef.current) return;
 
       if (extractedText.trim()) {
-        await storage.saveWhiteboardImage({ topicId: tid, imagePath: "", ocrText: extractedText });
+        await storage.saveWhiteboardImage({
+          topicId: tid,
+          imagePath: "",
+          ocrText: extractedText,
+        });
         await generateStudyMaterials(extractedText, tid, 2);
         if (cancelledRef.current) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        showToast({ type: "success", title: "Study materials created!", message: "Opening your new notes, flashcards, and quiz." });
+        showToast({
+          type: "success",
+          title: "Study materials created!",
+          message: "Opening your new notes, flashcards, and quiz.",
+        });
         loadData();
         navigation.navigate("Topic", { topicId: tid, courseId });
       } else {
-        showToast({ type: "warning", title: "No Text Found", message: "Could not extract text from the document." });
+        showToast({
+          type: "warning",
+          title: "No Text Found",
+          message: "Could not extract text from the document.",
+        });
       }
     } catch (error: any) {
       if (!cancelledRef.current) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        showToast({ type: "error", title: "Error", message: error?.message || "Failed to process document." });
+        showToast({
+          type: "error",
+          title: "Error",
+          message: error?.message || "Failed to process document.",
+        });
       }
     } finally {
       setIsUploading(false);
     }
   };
 
-  const [pasteTargetTopicId, setPasteTargetTopicId] = useState<string | null>(null);
+  const [pasteTargetTopicId, setPasteTargetTopicId] = useState<string | null>(
+    null,
+  );
 
-  const handlePasteClipboard = (courseId: string, preselectedTopicId: string | null = null) => {
+  const handlePasteClipboard = (
+    courseId: string,
+    preselectedTopicId: string | null = null,
+  ) => {
     setPasteText("");
     setPasteTargetCourseId(courseId);
     setPasteTargetTopicId(preselectedTopicId);
@@ -849,14 +1050,22 @@ export default function DashboardScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       const trimmedText = pasteText.trim();
-      await storage.saveWhiteboardImage({ topicId: tid, imagePath: "", ocrText: trimmedText });
+      await storage.saveWhiteboardImage({
+        topicId: tid,
+        imagePath: "",
+        ocrText: trimmedText,
+      });
       if (cancelledRef.current) return;
 
       await generateStudyMaterials(trimmedText, tid, 1);
       if (cancelledRef.current) return;
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast({ type: "success", title: "Study materials created!", message: "Opening your new notes, flashcards, and quiz." });
+      showToast({
+        type: "success",
+        title: "Study materials created!",
+        message: "Opening your new notes, flashcards, and quiz.",
+      });
       const navCourseId = pasteTargetCourseId;
       setPasteText("");
       setPasteTargetCourseId(null);
@@ -868,7 +1077,11 @@ export default function DashboardScreen() {
       if (!cancelledRef.current) {
         console.error("[Paste] Failed:", err);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        showToast({ type: "error", title: "Error", message: err?.message || "Failed to process pasted text." });
+        showToast({
+          type: "error",
+          title: "Error",
+          message: err?.message || "Failed to process pasted text.",
+        });
       }
     } finally {
       setIsUploading(false);
@@ -886,7 +1099,12 @@ export default function DashboardScreen() {
       <Modal visible transparent animationType="fade">
         <View style={styles.onboardingOverlay}>
           <Card style={styles.onboardingCard}>
-            <View style={[styles.onboardingIconWrap, { backgroundColor: theme.link + "15" }]}>
+            <View
+              style={[
+                styles.onboardingIconWrap,
+                { backgroundColor: theme.link + "15" },
+              ]}
+            >
               <Icon name="book-open" size={36} color={theme.link} />
             </View>
             <ThemedText type="h2" style={styles.onboardingTitle}>
@@ -894,18 +1112,30 @@ export default function DashboardScreen() {
             </ThemedText>
             <ThemedText
               type="body"
-              style={[styles.onboardingSubtitle, { color: theme.textSecondary }]}
+              style={[
+                styles.onboardingSubtitle,
+                { color: theme.textSecondary },
+              ]}
             >
-              Turn your lectures, photos, and notes into study materials automatically.
+              Turn your lectures, photos, and notes into study materials
+              automatically.
             </ThemedText>
             <View style={styles.onboardingSteps}>
               {[
                 { icon: "mic", label: "Record a lecture or paste your notes" },
-                { icon: "cpu", label: "AI generates notes, flashcards, and a quiz" },
+                {
+                  icon: "cpu",
+                  label: "AI generates notes, flashcards, and a quiz",
+                },
                 { icon: "award", label: "Study smarter and ace your exams" },
               ].map(({ icon, label }) => (
                 <View key={icon} style={styles.onboardingStep}>
-                  <View style={[styles.onboardingStepIcon, { backgroundColor: theme.link + "12" }]}>
+                  <View
+                    style={[
+                      styles.onboardingStepIcon,
+                      { backgroundColor: theme.link + "12" },
+                    ]}
+                  >
                     <Icon name={icon} size={16} color={theme.link} />
                   </View>
                   <ThemedText type="body" style={styles.onboardingStepText}>
@@ -914,7 +1144,12 @@ export default function DashboardScreen() {
                 </View>
               ))}
             </View>
-            <Button fullWidth size="lg" onPress={dismissOnboarding} style={{ marginTop: Spacing.xl }}>
+            <Button
+              fullWidth
+              size="lg"
+              onPress={dismissOnboarding}
+              style={{ marginTop: Spacing.xl }}
+            >
               Get Started
             </Button>
           </Card>
@@ -925,26 +1160,59 @@ export default function DashboardScreen() {
 
   // Shown when user has no topics yet — replaces the confusing icon grid
   const renderQuickAddHero = () => (
-    <View style={[styles.quickAddHero, { backgroundColor: "#7C3AED10", borderColor: "#7C3AED30" }]}>
+    <View
+      style={[
+        styles.quickAddHero,
+        { backgroundColor: "#7C3AED10", borderColor: "#7C3AED30" },
+      ]}
+    >
       <View style={[styles.quickAddHeaderRow]}>
-        <View style={[styles.quickAddHeroIcon, { backgroundColor: "#7C3AED20" }]}>
+        <View
+          style={[styles.quickAddHeroIcon, { backgroundColor: "#7C3AED20" }]}
+        >
           <Icon name="zap" size={20} color="#9F67FF" />
         </View>
         <View style={{ flex: 1 }}>
-          <ThemedText type="h4" style={[styles.quickAddTitle, { color: "#9F67FF" }]}>
+          <ThemedText
+            type="h4"
+            style={[styles.quickAddTitle, { color: "#9F67FF" }]}
+          >
             Add your first study material
           </ThemedText>
-          <ThemedText type="small" style={[styles.quickAddSubtitle, { color: theme.textSecondary }]}>
+          <ThemedText
+            type="small"
+            style={[styles.quickAddSubtitle, { color: theme.textSecondary }]}
+          >
             We'll organise everything automatically
           </ThemedText>
         </View>
       </View>
       <View style={styles.quickAddButtons}>
         {[
-          { label: "Record", icon: "mic", color: "#EF4444", action: handleQuickRecord },
-          { label: "Camera", icon: "camera", color: "#7C3AED", action: () => requireCourseForAction("camera") },
-          { label: "Upload", icon: "upload", color: "#10B981", action: () => requireCourseForAction("upload") },
-          { label: "Paste", icon: "clipboard", color: "#F59E0B", action: () => requireCourseForAction("clipboard") },
+          {
+            label: "Record",
+            icon: "mic",
+            color: "#EF4444",
+            action: handleQuickRecord,
+          },
+          {
+            label: "Camera",
+            icon: "camera",
+            color: "#7C3AED",
+            action: () => requireCourseForAction("camera"),
+          },
+          {
+            label: "Upload",
+            icon: "upload",
+            color: "#10B981",
+            action: () => requireCourseForAction("upload"),
+          },
+          {
+            label: "Paste",
+            icon: "clipboard",
+            color: "#F59E0B",
+            action: () => requireCourseForAction("clipboard"),
+          },
         ].map(({ label, icon, color, action }) => (
           <Pressable
             key={label}
@@ -956,10 +1224,25 @@ export default function DashboardScreen() {
             accessibilityRole="button"
             accessibilityLabel={label}
           >
-            <View style={[styles.quickAddButtonIcon, { backgroundColor: color + "20", borderColor: color + "40", borderWidth: 1 }]}>
+            <View
+              style={[
+                styles.quickAddButtonIcon,
+                {
+                  backgroundColor: color + "20",
+                  borderColor: color + "40",
+                  borderWidth: 1,
+                },
+              ]}
+            >
               <Icon name={icon} size={18} color={color} />
             </View>
-            <ThemedText type="caption" style={[styles.quickAddButtonLabel, { color: theme.textSecondary }]}>
+            <ThemedText
+              type="caption"
+              style={[
+                styles.quickAddButtonLabel,
+                { color: theme.textSecondary },
+              ]}
+            >
               {label}
             </ThemedText>
           </Pressable>
@@ -1003,7 +1286,10 @@ export default function DashboardScreen() {
           <Icon name={nextAction.icon} size={24} color={nextAction.color} />
         </View>
         <View style={[styles.nextActionContent, { pointerEvents: "none" }]}>
-          <ThemedText type="h4" style={{ color: nextAction.color, fontWeight: "700" }}>
+          <ThemedText
+            type="h4"
+            style={{ color: nextAction.color, fontWeight: "700" }}
+          >
             {nextAction.title}
           </ThemedText>
           <ThemedText
@@ -1021,23 +1307,97 @@ export default function DashboardScreen() {
   };
 
   const contentActions = [
-    { label: "Camera", icon: "camera" as const, color: theme.link, onPress: () => requireCourseForAction("camera"), testID: "button-camera" },
-    { label: "Gallery", icon: "image" as const, color: "#8B5CF6", onPress: () => requireCourseForAction("gallery"), testID: "button-gallery" },
-    { label: "Upload", icon: "upload" as const, color: theme.success, onPress: () => requireCourseForAction("upload"), testID: "button-upload" },
-    { label: "Clipboard", icon: "clipboard" as const, color: theme.warning, onPress: () => requireCourseForAction("clipboard"), testID: "button-clipboard" },
-    { label: "Record", icon: "mic" as const, color: theme.error, onPress: handleQuickRecord, testID: "button-record" },
+    {
+      label: "Camera",
+      icon: "camera" as const,
+      color: theme.link,
+      onPress: () => requireCourseForAction("camera"),
+      testID: "button-camera",
+    },
+    {
+      label: "Gallery",
+      icon: "image" as const,
+      color: "#8B5CF6",
+      onPress: () => requireCourseForAction("gallery"),
+      testID: "button-gallery",
+    },
+    {
+      label: "Upload",
+      icon: "upload" as const,
+      color: theme.success,
+      onPress: () => requireCourseForAction("upload"),
+      testID: "button-upload",
+    },
+    {
+      label: "Clipboard",
+      icon: "clipboard" as const,
+      color: theme.warning,
+      onPress: () => requireCourseForAction("clipboard"),
+      testID: "button-clipboard",
+    },
+    {
+      label: "Record",
+      icon: "mic" as const,
+      color: theme.error,
+      onPress: handleQuickRecord,
+      testID: "button-record",
+    },
   ];
 
   const studyActions = [
-    { label: "Study", icon: "book-open" as const, color: theme.success, onPress: () => navigation.navigate("StudyToday"), testID: "button-study" },
-    { label: "Exam", icon: "award" as const, color: theme.warning, onPress: () => navigation.navigate("ExamMode"), testID: "button-exam" },
-    { label: "Library", icon: "folder" as const, color: "#F59E0B", onPress: () => navigation.navigate("Library"), testID: "button-library" },
-    { label: "Mind Map", icon: "share-2" as const, color: "#06B6D4", onPress: handleMindMap, testID: "button-mindmap" },
-    { label: "Search", icon: "search" as const, color: theme.info, onPress: () => navigation.navigate("Search"), testID: "button-search" },
-    { label: "Write", icon: "edit-3" as const, color: "#EC4899", onPress: () => navigation.navigate("WritingLab"), testID: "button-write" },
+    {
+      label: "Study",
+      icon: "book-open" as const,
+      color: theme.success,
+      onPress: () => navigation.navigate("StudyToday"),
+      testID: "button-study",
+    },
+    {
+      label: "Exam",
+      icon: "award" as const,
+      color: theme.warning,
+      onPress: () => navigation.navigate("ExamMode"),
+      testID: "button-exam",
+    },
+    {
+      label: "Library",
+      icon: "folder" as const,
+      color: "#F59E0B",
+      onPress: () => navigation.navigate("Library"),
+      testID: "button-library",
+    },
+    {
+      label: "Mind Map",
+      icon: "share-2" as const,
+      color: "#06B6D4",
+      onPress: handleMindMap,
+      testID: "button-mindmap",
+    },
+    {
+      label: "Search",
+      icon: "search" as const,
+      color: theme.info,
+      onPress: () => navigation.navigate("Search"),
+      testID: "button-search",
+    },
+    {
+      label: "Write",
+      icon: "edit-3" as const,
+      color: "#EC4899",
+      onPress: () => navigation.navigate("WritingLab"),
+      testID: "button-write",
+    },
   ];
 
-  const renderActionRow = (actions: Array<{ label: string; icon: string; color: string; onPress: () => void; testID: string }>) => (
+  const renderActionRow = (
+    actions: Array<{
+      label: string;
+      icon: string;
+      color: string;
+      onPress: () => void;
+      testID: string;
+    }>,
+  ) => (
     <View style={styles.quickActionsRow}>
       {actions.map((action) => (
         <Pressable
@@ -1063,10 +1423,19 @@ export default function DashboardScreen() {
           accessibilityLabel={action.label}
           testID={action.testID}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: action.color + "20" }]}>
+          <View
+            style={[
+              styles.quickActionIcon,
+              { backgroundColor: action.color + "20" },
+            ]}
+          >
             <Icon name={action.icon} size={20} color={action.color} />
           </View>
-          <ThemedText type="caption" style={[styles.quickActionLabel, { color: theme.text }]} numberOfLines={1}>
+          <ThemedText
+            type="caption"
+            style={[styles.quickActionLabel, { color: theme.text }]}
+            numberOfLines={1}
+          >
             {action.label}
           </ThemedText>
         </Pressable>
@@ -1081,14 +1450,20 @@ export default function DashboardScreen() {
       <View style={styles.quickActionsContainer}>
         <ThemedText
           type="caption"
-          style={[styles.quickActionsSectionLabel, { color: theme.textSecondary }]}
+          style={[
+            styles.quickActionsSectionLabel,
+            { color: theme.textSecondary },
+          ]}
         >
           Add Content
         </ThemedText>
         {renderActionRow(contentActions)}
         <ThemedText
           type="caption"
-          style={[styles.quickActionsSectionLabel, { color: theme.textSecondary, marginTop: Spacing.md }]}
+          style={[
+            styles.quickActionsSectionLabel,
+            { color: theme.textSecondary, marginTop: Spacing.md },
+          ]}
         >
           Study Tools
         </ThemedText>
@@ -1099,11 +1474,36 @@ export default function DashboardScreen() {
 
   const renderStatsRow = () => {
     const stats = [
-      { icon: "file-text", value: topics.length, label: "Topics", color: "#7C3AED" },
-      { icon: "check-circle", value: completedTopics.length, label: "Completed", color: "#10B981" },
-      { icon: "layers", value: totalFlashcardCount, label: "Flashcards", color: "#F59E0B" },
-      { icon: "book", value: courses.length, label: "Courses", color: "#3B82F6" },
-      { icon: "activity", value: weeklyActivityCount, label: "This Week", color: "#06B6D4" },
+      {
+        icon: "file-text",
+        value: topics.length,
+        label: "Topics",
+        color: "#7C3AED",
+      },
+      {
+        icon: "check-circle",
+        value: completedTopics.length,
+        label: "Completed",
+        color: "#10B981",
+      },
+      {
+        icon: "layers",
+        value: totalFlashcardCount,
+        label: "Flashcards",
+        color: "#F59E0B",
+      },
+      {
+        icon: "book",
+        value: courses.length,
+        label: "Courses",
+        color: "#3B82F6",
+      },
+      {
+        icon: "activity",
+        value: weeklyActivityCount,
+        label: "This Week",
+        color: "#06B6D4",
+      },
     ];
 
     return (
@@ -1111,22 +1511,38 @@ export default function DashboardScreen() {
         {stats.map((stat) => (
           <View
             key={stat.label}
-            style={[styles.statTile, {
-              backgroundColor: theme.backgroundDefault,
-              borderColor: stat.color + "30",
-              shadowColor: stat.color,
-            }]}
+            style={[
+              styles.statTile,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: stat.color + "30",
+                shadowColor: stat.color,
+              },
+            ]}
           >
-            <View style={[styles.statTileIcon, { backgroundColor: stat.color + "18" }]}>
+            <View
+              style={[
+                styles.statTileIcon,
+                { backgroundColor: stat.color + "18" },
+              ]}
+            >
               <Icon name={stat.icon} size={18} color={stat.color} />
             </View>
-            <ThemedText type="h2" style={[styles.statTileValue, { color: theme.text }]}>
+            <ThemedText
+              type="h2"
+              style={[styles.statTileValue, { color: theme.text }]}
+            >
               {stat.value}
             </ThemedText>
-            <ThemedText type="caption" style={[styles.statTileLabel, { color: theme.textSecondary }]}>
+            <ThemedText
+              type="caption"
+              style={[styles.statTileLabel, { color: theme.textSecondary }]}
+            >
               {stat.label}
             </ThemedText>
-            <View style={[styles.statTileAccent, { backgroundColor: stat.color }]} />
+            <View
+              style={[styles.statTileAccent, { backgroundColor: stat.color }]}
+            />
           </View>
         ))}
       </View>
@@ -1135,19 +1551,29 @@ export default function DashboardScreen() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "completed": return "check-circle";
-      case "transcribing": return "loader";
-      case "pending": return "clock";
-      default: return "file-text";
+      case "completed":
+        return "check-circle";
+      case "transcribing":
+        return "loader";
+      case "pending":
+        return "clock";
+      default:
+        return "file-text";
     }
   };
 
-  const getStatusVariant = (status: string): "success" | "warning" | "info" | "default" => {
+  const getStatusVariant = (
+    status: string,
+  ): "success" | "warning" | "info" | "default" => {
     switch (status) {
-      case "completed": return "success";
-      case "transcribing": return "info";
-      case "pending": return "warning";
-      default: return "default";
+      case "completed":
+        return "success";
+      case "transcribing":
+        return "info";
+      case "pending":
+        return "warning";
+      default:
+        return "default";
     }
   };
 
@@ -1158,7 +1584,8 @@ export default function DashboardScreen() {
 
   const recentTopics = useMemo(() => {
     const byCreatedDesc = [...topics].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
     const topicById = new Map(topics.map((t) => [t.id, t]));
     const visited = recentTopicIds
@@ -1194,7 +1621,12 @@ export default function DashboardScreen() {
                 variant={getStatusVariant(topic.status)}
               />
             }
-            onPress={() => navigation.navigate("Topic", { topicId: topic.id, courseId: topic.courseId })}
+            onPress={() =>
+              navigation.navigate("Topic", {
+                topicId: topic.id,
+                courseId: topic.courseId,
+              })
+            }
             testID={`topic-item-${topic.id}`}
           />
         ))}
@@ -1226,7 +1658,11 @@ export default function DashboardScreen() {
         <SectionHeader
           title="Your Semesters"
           icon="folder"
-          action={{ label: "Add", icon: "plus", onPress: () => setShowAddSheet(true) }}
+          action={{
+            label: "Add",
+            icon: "plus",
+            onPress: () => setShowAddSheet(true),
+          }}
         />
         {rows.map((row, rowIndex) => (
           <View key={rowIndex} style={row.length > 1 ? styles.row : undefined}>
@@ -1236,15 +1672,26 @@ export default function DashboardScreen() {
                 <Card
                   key={semester.id}
                   style={styles.semesterCard}
-                  onPress={() => navigation.navigate("Semester", { semesterId: semester.id })}
+                  onPress={() =>
+                    navigation.navigate("Semester", { semesterId: semester.id })
+                  }
                   onLongPress={() => handleDeleteSemester(semester)}
                 >
                   <View style={styles.cardHeader}>
-                    <View style={[styles.iconContainer, { backgroundColor: theme.link + "15" }]}>
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        { backgroundColor: theme.link + "15" },
+                      ]}
+                    >
                       <Icon name="calendar" size={20} color={theme.link} />
                     </View>
                   </View>
-                  <ThemedText type="h4" style={styles.semesterName} numberOfLines={2}>
+                  <ThemedText
+                    type="h4"
+                    style={styles.semesterName}
+                    numberOfLines={2}
+                  >
                     {semester.name}
                   </ThemedText>
                   <Badge
@@ -1272,12 +1719,38 @@ export default function DashboardScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={{ paddingTop: headerHeight + Spacing.lg, paddingHorizontal: Spacing.lg }}>
+      <View
+        style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel="Loading your dashboard"
+        accessibilityState={{ busy: true }}
+        accessibilityLiveRegion="polite"
+      >
+        <View
+          style={{
+            paddingTop: headerHeight + Spacing.lg,
+            paddingHorizontal: Spacing.lg,
+          }}
+        >
           <SkeletonCard />
           <View style={{ marginTop: Spacing.lg }} />
           <SkeletonList count={3} />
         </View>
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View
+        style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      >
+        <ErrorState
+          title="Couldn't load your dashboard"
+          message="Please try again."
+          onRetry={() => void loadData(true)}
+        />
       </View>
     );
   }
@@ -1296,16 +1769,36 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator
       >
         {/* ── Hero greeting ── */}
-        <View style={[styles.heroCard, { backgroundColor: theme.backgroundDefault, borderColor: "#7C3AED30" }]}>
+        <View
+          style={[
+            styles.heroCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: "#7C3AED30",
+            },
+          ]}
+        >
           <View style={styles.heroTop}>
             <View style={{ flex: 1 }}>
-              <ThemedText type="caption" style={[styles.heroEyebrow, { color: "#9F67FF" }]}>
-                {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              <ThemedText
+                type="caption"
+                style={[styles.heroEyebrow, { color: "#9F67FF" }]}
+              >
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}
               </ThemedText>
               <ThemedText type="h2" style={styles.heroTitle}>
-                {user?.name ? `Hey, ${user.name.split(" ")[0]} 👋` : "Welcome back"}
+                {user?.name
+                  ? `Hey, ${user.name.split(" ")[0]} 👋`
+                  : "Welcome back"}
               </ThemedText>
-              <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: 2 }}>
+              <ThemedText
+                type="body"
+                style={{ color: theme.textSecondary, marginTop: 2 }}
+              >
                 {topics.length > 0
                   ? `${completedTopics.length} of ${topics.length} topics completed`
                   : "Your AI study assistant is ready"}
@@ -1313,19 +1806,46 @@ export default function DashboardScreen() {
             </View>
             {topics.length > 0 ? (
               <View style={styles.heroProgressRing}>
-                <View style={[styles.heroProgressFill, {
-                  borderColor: "#7C3AED",
-                  borderLeftColor: topics.length > 0 && completedTopics.length / topics.length > 0.5 ? "#7C3AED" : "transparent",
-                }]} />
+                <View
+                  style={[
+                    styles.heroProgressFill,
+                    {
+                      borderColor: "#7C3AED",
+                      borderLeftColor:
+                        topics.length > 0 &&
+                        completedTopics.length / topics.length > 0.5
+                          ? "#7C3AED"
+                          : "transparent",
+                    },
+                  ]}
+                />
                 <View style={styles.heroProgressCenter}>
-                  <ThemedText style={[styles.heroProgressPct, { color: "#9F67FF" }]}>
-                    {topics.length > 0 ? Math.round((completedTopics.length / topics.length) * 100) : 0}
+                  <ThemedText
+                    style={[styles.heroProgressPct, { color: "#9F67FF" }]}
+                  >
+                    {topics.length > 0
+                      ? Math.round(
+                          (completedTopics.length / topics.length) * 100,
+                        )
+                      : 0}
                   </ThemedText>
-                  <ThemedText style={[styles.heroProgressLabel, { color: theme.textSecondary }]}>%</ThemedText>
+                  <ThemedText
+                    style={[
+                      styles.heroProgressLabel,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    %
+                  </ThemedText>
                 </View>
               </View>
             ) : (
-              <View style={[styles.heroAvatarWrap, { backgroundColor: "#7C3AED20" }]}>
+              <View
+                style={[
+                  styles.heroAvatarWrap,
+                  { backgroundColor: "#7C3AED20" },
+                ]}
+              >
                 <Icon name="zap" size={28} color="#9F67FF" />
               </View>
             )}
@@ -1350,7 +1870,10 @@ export default function DashboardScreen() {
 
       {semesters.length > 0 ? (
         <Pressable
-          style={[styles.fab, { backgroundColor: theme.link, bottom: tabBarHeight + 16 }]}
+          style={[
+            styles.fab,
+            { backgroundColor: theme.link, bottom: tabBarHeight + 16 },
+          ]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             setShowAddSheet(true);
@@ -1366,10 +1889,16 @@ export default function DashboardScreen() {
 
       <BottomSheet
         visible={showAddSheet}
-        onClose={() => { setShowAddSheet(false); setSemesterName(""); }}
+        onClose={() => {
+          setShowAddSheet(false);
+          setSemesterName("");
+        }}
         title="New Semester"
       >
-        <ThemedText type="small" style={[styles.sheetHint, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sheetHint, { color: theme.textSecondary }]}
+        >
           {'Name your semester (e.g., "Fall 2025" or "Senior Year")'}
         </ThemedText>
         <Input
@@ -1378,7 +1907,12 @@ export default function DashboardScreen() {
           onChangeText={setSemesterName}
           autoFocus
         />
-        <Button onPress={handleAddSemester} disabled={!semesterName.trim()} size="lg" fullWidth>
+        <Button
+          onPress={handleAddSemester}
+          disabled={!semesterName.trim()}
+          size="lg"
+          fullWidth
+        >
           Create Semester
         </Button>
       </BottomSheet>
@@ -1388,12 +1922,18 @@ export default function DashboardScreen() {
         onClose={() => setShowQuickRecordSheet(false)}
         title="Quick Record"
       >
-        <ThemedText type="small" style={[styles.sheetHint, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sheetHint, { color: theme.textSecondary }]}
+        >
           Select a topic to start recording
         </ThemedText>
         {getCoursesWithTopics().map((course) => (
           <View key={course.id} style={styles.courseSection}>
-            <ThemedText type="caption" style={[styles.courseSectionTitle, { color: course.color }]}>
+            <ThemedText
+              type="caption"
+              style={[styles.courseSectionTitle, { color: course.color }]}
+            >
               {course.name}
             </ThemedText>
             {course.courseTopics.map((topic) => (
@@ -1409,14 +1949,18 @@ export default function DashboardScreen() {
         ))}
         {getCoursesWithTopics().length === 0 ? (
           <View style={styles.noTopicsContainer}>
-            <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center" }}>
+            <ThemedText
+              type="body"
+              style={{ color: theme.textSecondary, textAlign: "center" }}
+            >
               No topics available. Add a topic to your course first.
             </ThemedText>
             <Button
               variant="secondary"
               onPress={() => {
                 setShowQuickRecordSheet(false);
-                if (courses.length > 0) navigation.navigate("Course", { courseId: courses[0].id });
+                if (courses.length > 0)
+                  navigation.navigate("Course", { courseId: courses[0].id });
               }}
               style={styles.addTopicButton}
             >
@@ -1428,10 +1972,16 @@ export default function DashboardScreen() {
 
       <BottomSheet
         visible={showCoursePickerSheet}
-        onClose={() => { setShowCoursePickerSheet(false); setPendingAction(null); }}
+        onClose={() => {
+          setShowCoursePickerSheet(false);
+          setPendingAction(null);
+        }}
         title="Select a Course"
       >
-        <ThemedText type="small" style={[styles.sheetHint, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sheetHint, { color: theme.textSecondary }]}
+        >
           Choose which course to add materials to
         </ThemedText>
         {courses.map((course) => (
@@ -1453,37 +2003,61 @@ export default function DashboardScreen() {
 
       <BottomSheet
         visible={showTopicPickerSheet}
-        onClose={() => { setShowTopicPickerSheet(false); setPendingAction(null); setPendingCourseId(null); }}
+        onClose={() => {
+          setShowTopicPickerSheet(false);
+          setPendingAction(null);
+          setPendingCourseId(null);
+        }}
         title="Select a Topic"
       >
-        <ThemedText type="small" style={[styles.sheetHint, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sheetHint, { color: theme.textSecondary }]}
+        >
           Choose which topic to save your study materials to
         </ThemedText>
-        {pendingCourseId ? topics.filter((t) => t.courseId === pendingCourseId).map((topic) => (
-          <ListItem
-            key={topic.id}
-            title={topic.name}
-            leftIcon="bookmark"
-            leftIconColor={theme.link}
-            onPress={() => {
-              setShowTopicPickerSheet(false);
-              if (pendingAction && pendingCourseId) {
-                executeContentWithTopic(pendingAction, pendingCourseId, topic.id);
-              }
-              setPendingAction(null);
-              setPendingCourseId(null);
-            }}
-          />
-        )) : null}
+        {pendingCourseId
+          ? topics
+              .filter((t) => t.courseId === pendingCourseId)
+              .map((topic) => (
+                <ListItem
+                  key={topic.id}
+                  title={topic.name}
+                  leftIcon="bookmark"
+                  leftIconColor={theme.link}
+                  onPress={() => {
+                    setShowTopicPickerSheet(false);
+                    if (pendingAction && pendingCourseId) {
+                      executeContentWithTopic(
+                        pendingAction,
+                        pendingCourseId,
+                        topic.id,
+                      );
+                    }
+                    setPendingAction(null);
+                    setPendingCourseId(null);
+                  }}
+                />
+              ))
+          : null}
       </BottomSheet>
 
       <BottomSheet
         visible={showPasteSheet}
-        onClose={() => { setShowPasteSheet(false); setPasteText(""); setPasteTargetCourseId(null); setPasteTargetTopicId(null); }}
+        onClose={() => {
+          setShowPasteSheet(false);
+          setPasteText("");
+          setPasteTargetCourseId(null);
+          setPasteTargetTopicId(null);
+        }}
         title="Paste Text"
       >
-        <ThemedText type="small" style={[styles.sheetHint, { color: theme.textSecondary }]}>
-          Paste or type your study notes, then tap Generate to create study materials
+        <ThemedText
+          type="small"
+          style={[styles.sheetHint, { color: theme.textSecondary }]}
+        >
+          Paste or type your study notes, then tap Generate to create study
+          materials
         </ThemedText>
         <TextInput
           testID="input-paste-text"
@@ -1495,7 +2069,11 @@ export default function DashboardScreen() {
           onChangeText={setPasteText}
           style={[
             styles.pasteInput,
-            { color: theme.text, backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+            {
+              color: theme.text,
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
           ]}
           textAlignVertical="top"
           autoFocus
@@ -1512,10 +2090,16 @@ export default function DashboardScreen() {
 
       <BottomSheet
         visible={showDeleteSheet}
-        onClose={() => { setShowDeleteSheet(false); setDeleteSemesterTarget(null); }}
+        onClose={() => {
+          setShowDeleteSheet(false);
+          setDeleteSemesterTarget(null);
+        }}
         title="Delete Semester?"
       >
-        <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: Spacing.lg }}>
+        <ThemedText
+          type="body"
+          style={{ color: theme.textSecondary, marginBottom: Spacing.lg }}
+        >
           {deleteSemesterTarget
             ? `This will permanently delete "${deleteSemesterTarget.name}" and all its courses and topics.`
             : ""}
@@ -1526,7 +2110,10 @@ export default function DashboardScreen() {
         <Button
           variant="ghost"
           fullWidth
-          onPress={() => { setShowDeleteSheet(false); setDeleteSemesterTarget(null); }}
+          onPress={() => {
+            setShowDeleteSheet(false);
+            setDeleteSemesterTarget(null);
+          }}
           style={{ marginTop: Spacing.sm }}
         >
           Cancel
@@ -1536,8 +2123,18 @@ export default function DashboardScreen() {
       {/* ── Processing overlay ─────────────────────────────────────────── */}
 
       {isUploading ? (
-        <View style={[styles.uploadingOverlay, { backgroundColor: "rgba(0,0,0,0.6)" }]}>
-          <Card style={[styles.uploadingCard, { backgroundColor: theme.backgroundDefault }]}>
+        <View
+          style={[
+            styles.uploadingOverlay,
+            { backgroundColor: "rgba(0,0,0,0.6)" },
+          ]}
+        >
+          <Card
+            style={[
+              styles.uploadingCard,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
             <ThemedText type="h4" style={styles.uploadingTitle}>
               Creating Study Materials
             </ThemedText>
@@ -1546,21 +2143,31 @@ export default function DashboardScreen() {
                 <View key={step} style={styles.processingStep}>
                   <View style={styles.processingStepIcon}>
                     {index < currentStepIndex ? (
-                      <Icon name="check-circle" size={18} color={theme.success} />
+                      <Icon
+                        name="check-circle"
+                        size={18}
+                        color={theme.success}
+                      />
                     ) : index === currentStepIndex ? (
                       <ActivityIndicator size="small" color={theme.link} />
                     ) : (
-                      <View style={[styles.stepDot, { backgroundColor: theme.border }]} />
+                      <View
+                        style={[
+                          styles.stepDot,
+                          { backgroundColor: theme.border },
+                        ]}
+                      />
                     )}
                   </View>
                   <ThemedText
                     type="body"
                     style={{
-                      color: index < currentStepIndex
-                        ? theme.textSecondary
-                        : index === currentStepIndex
-                          ? theme.text
-                          : theme.textSecondary,
+                      color:
+                        index < currentStepIndex
+                          ? theme.textSecondary
+                          : index === currentStepIndex
+                            ? theme.text
+                            : theme.textSecondary,
                       fontWeight: index === currentStepIndex ? "600" : "400",
                       opacity: index > currentStepIndex ? 0.5 : 1,
                     }}
@@ -1830,7 +2437,14 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
   },
   statItem: { alignItems: "center", flex: 1, paddingVertical: Spacing.sm },
-  statIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", marginBottom: Spacing.xs },
+  statIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.xs,
+  },
   statValue: { fontWeight: "700" },
   statLabel: { marginTop: 2 },
 
